@@ -29,30 +29,30 @@ jobs:
         sh dl_toolchain.sh
         mkdir -p /opt/images/
 
-    - name: Bypass Dead Go Mirror & Patch Kernel
+    - name: Reset Driver to Clean State & Patch Offset Only
       run: |
-        # 1. Triệt tiêu hoàn toàn lệnh tải Go chết link trong Makefile của tools
+        # 1. Triệt tiêu Go toolchain chết link
         if [ -f "trunk/tools/Makefile" ]; then
           sed -i '/go_build:/,/touch/c\go_build:\n\t@true' trunk/tools/Makefile
           sed -i 's/go_build//g' trunk/tools/Makefile
-          echo "Bypassed dead go_build in trunk/tools/Makefile."
         fi
-
-        # 2. Tạo sẵn thư mục giả lập go để tránh makefile đòi hỏi
         mkdir -p trunk/tools/go/bin
         touch trunk/tools/go_build_done
 
-        # 3. Vá offset 0x200000 cho PB-Boot và hoàn tác tên struct trong driver NAND
+        # 2. Hoàn tác file C về nguyên bản gốc của repo (xóa sạch các sửa đổi gây lỗi struct)
+        git checkout trunk/linux-3.4.x/drivers/mtd/ralink/ralink_nand.c 2>/dev/null || true
+        git checkout trunk/linux-3.4.x/drivers/mtd/nand/ralink_nand.c 2>/dev/null || true
+
+        # 3. Chỉ sửa duy nhất giá trị offset 0x600000 thành 0x200000 cho PB-Boot
         for f in trunk/linux-3.4.x/drivers/mtd/ralink/ralink_nand.c trunk/linux-3.4.x/drivers/mtd/nand/ralink_nand.c; do
           if [ -f "$f" ]; then
-            sed -i 's/hdr\.ih_magic/hdr.magic/g' "$f"
-            sed -i 's/hdr\.ih_ksz/hdr.size/g' "$f"
             sed -i 's/0x600000/0x200000/g' "$f"
-            echo "Patched $f successfully."
+            sed -i 's/0x60000/0x20000/g' "$f" 2>/dev/null || true
+            echo "Cleanly patched offset in $f"
           fi
         done
 
-    - name: Build Firmware
+    - name: Build Clean Firmware
       env:
         TNAME: "MI-3"
       run: |
@@ -67,13 +67,13 @@ jobs:
           fi
           cp -f configs/templates/$m.config .config
           
-          # Đảm bảo bật định dạng ổ đĩa USB để sau này cài Entware
+          # Hỗ trợ USB định dạng EXT4/FAT để dùng Entware cài app sau này
           echo "CONFIG_FIRMWARE_ENABLE_EXT2=y" >> .config
           echo "CONFIG_FIRMWARE_ENABLE_EXT3=y" >> .config
           echo "CONFIG_FIRMWARE_ENABLE_EXT4=y" >> .config
           echo "CONFIG_FIRMWARE_ENABLE_FAT=y" >> .config
           
-          # Tắt toàn bộ plugin rác / phụ thuộc bên ngoài
+          # Tắt sạch plugin rác để firmware nhẹ và sạch
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_.*=y/CONFIG_FIRMWARE_INCLUDE_&=n/g' .config 2>/dev/null || true
           echo "CONFIG_FIRMWARE_INCLUDE_MENTOHUST=n" >> .config
           echo "CONFIG_FIRMWARE_INCLUDE_SCUTCLIENT=n" >> .config
