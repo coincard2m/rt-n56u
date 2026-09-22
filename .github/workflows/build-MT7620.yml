@@ -29,24 +29,20 @@ jobs:
         sh dl_toolchain.sh
         mkdir -p /opt/images/
 
-    - name: Pre-fetch Official Go Compiler
+    - name: Fix NAND Driver & Patch Offset
       run: |
-        mkdir -p trunk/tools/go/go
-        curl -sL "https://dl.google.com/go/go1.15.2.linux-amd64.tar.gz" -o trunk/tools/go/go1.15.2.linux-amd64.tar.gz
-        tar -zxf trunk/tools/go/go1.15.2.linux-amd64.tar.gz -C trunk/tools/go/
-        echo "Official Go 1.15.2 compiler fetched and extracted successfully."
+        for f in trunk/linux-3.4.x/drivers/mtd/ralink/ralink_nand.c trunk/linux-3.4.x/drivers/mtd/nand/ralink_nand.c; do
+          if [ -f "$f" ]; then
+            # Sửa lại các biến bị gõ nhầm thành chuẩn gốc
+            sed -i 's/hdr\.ih_magic/hdr.magic/g' "$f"
+            sed -i 's/hdr\.ih_ksz/hdr.size/g' "$f"
+            # Chuyển offset về 0x200000 cho PB-Boot
+            sed -i 's/0x600000/0x200000/g' "$f"
+            echo "Patched $f successfully."
+          fi
+        done
 
-    - name: Auto-patch NAND Offset for PB-Boot
-      run: |
-        TARGET_FILE="trunk/linux-3.4.x/drivers/mtd/nand/ralink_nand.c"
-        if [ -f "$TARGET_FILE" ]; then
-          sed -i 's/0x600000/0x200000/g' "$TARGET_FILE"
-          echo "Checked & Patched ralink_nand.c offset to 0x200000 successfully."
-        else
-          echo "Warning: File ralink_nand.c not found at expected path."
-        fi
-
-    - name: Build Firmware
+    - name: Build Clean Firmware
       env:
         TNAME: "MI-3"
       run: |
@@ -60,39 +56,18 @@ jobs:
             exit 1
           fi
           cp -f configs/templates/$m.config .config
-          #####################################################################################
-          sed -i '/CONFIG_FIRMWARE_INCLUDE_MENTOHUST/d' .config
-          sed -i '/CONFIG_FIRMWARE_INCLUDE_SCUTCLIENT/d' .config
-          sed -i '/CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS/d' .config
-          sed -i '/CONFIG_FIRMWARE_INCLUDE_SSSERVER/d' .config
-          sed -i '/CONFIG_FIRMWARE_INCLUDE_DNSFORWARDER/d' .config
-          sed -i '/CONFIG_FIRMWARE_INCLUDE_ADBYBY/d' .config
-          sed -i '/CONFIG_FIRMWARE_INCLUDE_FRPC/d' .config
-          sed -i '/CONFIG_FIRMWARE_INCLUDE_FRPS/d' .config
-          sed -i '/CONFIG_FIRMWARE_INCLUDE_TUNSAFE/d' .config
-          sed -i '/CONFIG_FIRMWARE_INCLUDE_ALIDDNS/d' .config
-          sed -i '/CONFIG_FIRMWARE_INCLUDE_SMARTDNS/d' .config
-          sed -i '/CONFIG_FIRMWARE_INCLUDE_SMARTDNSBIN/d' .config
-          sed -i '/CONFIG_FIRMWARE_INCLUDE_SRELAY/d' .config
-          sed -i '/CONFIG_FIRMWARE_INCLUDE_ADGUARDHOME/d' .config
-          sed -i '/CONFIG_FIRMWARE_INCLUDE_WYY/d' .config
-          sed -i '/CONFIG_FIRMWARE_INCLUDE_WYYBIN/d' .config
-          sed -i '/CONFIG_FIRMWARE_INCLUDE_CADDY/d' .config
-          sed -i '/CONFIG_FIRMWARE_INCLUDE_CADDYBIN/d' .config
-          sed -i '/CONFIG_FIRMWARE_INCLUDE_V2RAY/d' .config
-          sed -i '/CONFIG_FIRMWARE_INCLUDE_TROJAN/d' .config
-          sed -i '/CONFIG_FIRMWARE_INCLUDE_ZEROTIER/d' .config
-          #####################################################################################
-          # BẬT TẬN DỤNG FLASH 128MB CHO GO VÀ TIỆN ÍCH MẠNG
-          echo "CONFIG_FIRMWARE_INCLUDE_ADGUARDHOME=y" >> .config
-          echo "CONFIG_FIRMWARE_INCLUDE_SMARTDNS=y" >> .config
-          echo "CONFIG_FIRMWARE_INCLUDE_SMARTDNSBIN=y" >> .config
-          echo "CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=y" >> .config
-          echo "CONFIG_FIRMWARE_INCLUDE_IPT2SOCKS=y" >> .config
-          echo "CONFIG_FIRMWARE_INCLUDE_MICROSOCKS=y" >> .config
-          # Tắt các gói máy chủ nội địa Trung Quốc không dùng đến
+          
+          # Đảm bảo bật hỗ trợ USB, định dạng Ext4/FAT32 để cắm USB cài Entware
+          echo "CONFIG_FIRMWARE_ENABLE_EXT2=y" >> .config
+          echo "CONFIG_FIRMWARE_ENABLE_EXT3=y" >> .config
+          echo "CONFIG_FIRMWARE_ENABLE_EXT4=y" >> .config
+          echo "CONFIG_FIRMWARE_ENABLE_FAT=y" >> .config
+          
+          # Tắt sạch toàn bộ các plugin cài cắm rác ngoài mã nguồn
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_.*=y/CONFIG_FIRMWARE_INCLUDE_&=n/g' .config 2>/dev/null || true
           echo "CONFIG_FIRMWARE_INCLUDE_MENTOHUST=n" >> .config
           echo "CONFIG_FIRMWARE_INCLUDE_SCUTCLIENT=n" >> .config
+          echo "CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=n" >> .config
           echo "CONFIG_FIRMWARE_INCLUDE_SSSERVER=n" >> .config
           echo "CONFIG_FIRMWARE_INCLUDE_DNSFORWARDER=n" >> .config
           echo "CONFIG_FIRMWARE_INCLUDE_ADBYBY=n" >> .config
@@ -100,6 +75,8 @@ jobs:
           echo "CONFIG_FIRMWARE_INCLUDE_FRPS=n" >> .config
           echo "CONFIG_FIRMWARE_INCLUDE_TUNSAFE=n" >> .config
           echo "CONFIG_FIRMWARE_INCLUDE_ALIDDNS=n" >> .config
+          echo "CONFIG_FIRMWARE_INCLUDE_SMARTDNS=n" >> .config
+          echo "CONFIG_FIRMWARE_INCLUDE_SMARTDNSBIN=n" >> .config
           echo "CONFIG_FIRMWARE_INCLUDE_SRELAY=n" >> .config
           echo "CONFIG_FIRMWARE_INCLUDE_WYY=n" >> .config
           echo "CONFIG_FIRMWARE_INCLUDE_WYYBIN=n" >> .config
@@ -108,7 +85,9 @@ jobs:
           echo "CONFIG_FIRMWARE_INCLUDE_V2RAY=n" >> .config
           echo "CONFIG_FIRMWARE_INCLUDE_TROJAN=n" >> .config
           echo "CONFIG_FIRMWARE_INCLUDE_ZEROTIER=n" >> .config
-          #####################################################################################
+          echo "CONFIG_FIRMWARE_INCLUDE_ADGUARDHOME=n" >> .config
+          echo "CONFIG_FIRMWARE_INCLUDE_KOOLPROXY=n" >> .config
+          
           sed -i "s/^CONFIG_TOOLCHAIN_DIR=.*$/CONFIG_TOOLCHAIN_DIR=${CONFIG_TOOLCHAIN_DIR}/g" .config
           sudo ./clear_tree_simple
           sudo ./build_firmware_modify $m 0
