@@ -29,6 +29,13 @@ jobs:
         sh dl_toolchain.sh
         mkdir -p /opt/images/
 
+    - name: Pre-fetch Official Go Compiler
+      run: |
+        mkdir -p trunk/tools/go/go
+        curl -sL "https://dl.google.com/go/go1.15.2.linux-amd64.tar.gz" -o trunk/tools/go/go1.15.2.linux-amd64.tar.gz
+        tar -zxf trunk/tools/go/go1.15.2.linux-amd64.tar.gz -C trunk/tools/go/
+        echo "Official Go 1.15.2 compiler fetched and extracted successfully."
+
     - name: Auto-patch NAND Offset for PB-Boot
       run: |
         TARGET_FILE="trunk/linux-3.4.x/drivers/mtd/nand/ralink_nand.c"
@@ -38,17 +45,6 @@ jobs:
         else
           echo "Warning: File ralink_nand.c not found at expected path."
         fi
-
-    - name: Pre-fetch Official AdGuard Home (Softfloat MIPSLE)
-      run: |
-        mkdir -p /tmp/agh
-        curl -sL "https://github.com/AdguardTeam/AdGuardHome/releases/latest/download/AdGuardHome_linux_mipsle_softfloat.tar.gz" -o /tmp/agh/agh.tar.gz
-        tar -zxvf /tmp/agh/agh.tar.gz -C /tmp/agh/
-        mkdir -p trunk/user/adguardhome/bin
-        cp -f /tmp/agh/AdGuardHome/AdGuardHome trunk/user/adguardhome/AdGuardHome
-        cp -f /tmp/agh/AdGuardHome/AdGuardHome trunk/user/adguardhome/bin/AdGuardHome
-        chmod +x trunk/user/adguardhome/AdGuardHome trunk/user/adguardhome/bin/AdGuardHome
-        echo "AdGuard Home binary deployed successfully."
 
     - name: Build Firmware
       env:
@@ -65,7 +61,6 @@ jobs:
           fi
           cp -f configs/templates/$m.config .config
           #####################################################################################
-          # Xóa các định nghĩa cũ trong template
           sed -i '/CONFIG_FIRMWARE_INCLUDE_MENTOHUST/d' .config
           sed -i '/CONFIG_FIRMWARE_INCLUDE_SCUTCLIENT/d' .config
           sed -i '/CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS/d' .config
@@ -88,14 +83,14 @@ jobs:
           sed -i '/CONFIG_FIRMWARE_INCLUDE_TROJAN/d' .config
           sed -i '/CONFIG_FIRMWARE_INCLUDE_ZEROTIER/d' .config
           #####################################################################################
-          # KÍCH HOẠT TÍNH NĂNG MẠNH MẼ CHO 128MB NAND
+          # BẬT TẬN DỤNG FLASH 128MB CHO GO VÀ TIỆN ÍCH MẠNG
           echo "CONFIG_FIRMWARE_INCLUDE_ADGUARDHOME=y" >> .config
           echo "CONFIG_FIRMWARE_INCLUDE_SMARTDNS=y" >> .config
           echo "CONFIG_FIRMWARE_INCLUDE_SMARTDNSBIN=y" >> .config
           echo "CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=y" >> .config
           echo "CONFIG_FIRMWARE_INCLUDE_IPT2SOCKS=y" >> .config
           echo "CONFIG_FIRMWARE_INCLUDE_MICROSOCKS=y" >> .config
-          # TẮT CÁC GÓI LINK CHẾT / RÁC NỘI ĐỊA TRUNG QUỐC
+          # Tắt các gói máy chủ nội địa Trung Quốc không dùng đến
           echo "CONFIG_FIRMWARE_INCLUDE_MENTOHUST=n" >> .config
           echo "CONFIG_FIRMWARE_INCLUDE_SCUTCLIENT=n" >> .config
           echo "CONFIG_FIRMWARE_INCLUDE_SSSERVER=n" >> .config
