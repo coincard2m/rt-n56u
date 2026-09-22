@@ -27,15 +27,20 @@ jobs:
           sh dl_toolchain.sh
           mkdir -p /opt/images/
 
-      - name: Fix Golang Mirror & GCC Flags
+      - name: Fix Golang Mirror & GCC Flags & OpenSSL Docs
         run: |
           cd trunk
-          # Sửa mirror Golang chết link trong tools
+          # 1. Sửa mirror Golang chết link
           find tools -type f -exec sed -i 's|https://gomirrors.org/dl/go|https://dl.google.com/go|g' {} + 2>/dev/null || true
           find tools -type f -exec sed -i 's|https://mirrors.aliyun.com/golang|https://dl.google.com/go|g' {} + 2>/dev/null || true
           
-          # Ép cờ -fcommon để kernel build được trên Ubuntu 22.04
+          # 2. Ép cờ -fcommon tương thích GCC 11/12
           find linux-3.4.x -name "Makefile*" -exec sed -i 's/^HOSTCFLAGS\s*:=.*/& -fcommon/' {} + 2>/dev/null || true
+
+          # 3. Chặn OpenSSL tự copy tài liệu HTML/manpages gây treo/sập build
+          find libs -name "Makefile*" -exec sed -i 's/install_docs//g' {} + 2>/dev/null || true
+          find libs/libssl -name "Makefile*" -exec sed -i 's/install_docs//g' {} + 2>/dev/null || true
+          find user -name "Makefile*" -exec sed -i 's/install_docs//g' {} + 2>/dev/null || true
 
       - name: Compile Firmware
         env:
@@ -53,18 +58,33 @@ jobs:
           cp -f "configs/templates/${TNAME}.config" .config
           sed -i "s|^CONFIG_TOOLCHAIN_DIR=.*|CONFIG_TOOLCHAIN_DIR=${CONFIG_TOOLCHAIN_DIR}|g" .config
           
-          # Tắt binary bên ngoài chống 404
+          # Tự động tắt toàn bộ các gói kéo theo OpenSSL và binary ngoài trực tiếp trên .config
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_HTTPS=y/CONFIG_FIRMWARE_INCLUDE_HTTPS=n/' .config
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_SFTP=y/CONFIG_FIRMWARE_INCLUDE_SFTP=n/' .config
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_DDNS_SSL=y/CONFIG_FIRMWARE_INCLUDE_DDNS_SSL=n/' .config
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EC=y/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EC=n/' .config
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EXE=y/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EXE=n/' .config
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_EAP_PEAP=y/CONFIG_FIRMWARE_INCLUDE_EAP_PEAP=n/' .config
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_OPENSSH=y/CONFIG_FIRMWARE_INCLUDE_OPENSSH=n/' .config
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_DROPBEAR=n/CONFIG_FIRMWARE_INCLUDE_DROPBEAR=y/' .config
+          
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_SMARTDNSBIN=y/CONFIG_FIRMWARE_INCLUDE_SMARTDNSBIN=n/' .config
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_V2RAY=y/CONFIG_FIRMWARE_INCLUDE_V2RAY=n/' .config
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_TROJAN=y/CONFIG_FIRMWARE_INCLUDE_TROJAN=n/' .config
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=y/CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=n/' .config
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_ARIA=y/CONFIG_FIRMWARE_INCLUDE_ARIA=n/' .config
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_ARIA_WEB_CONTROL=y/CONFIG_FIRMWARE_INCLUDE_ARIA_WEB_CONTROL=n/' .config
           
+          # Dọn dẹp và chạy build
           sudo ./clear_tree_simple
           
           set -o pipefail
           sudo ./build_firmware_modify "${TNAME}" 0 2>&1 | tee build_process.log || BUILD_FAILED=1
           
           if [ "$BUILD_FAILED" = "1" ]; then
-            echo "::error::BUILD LOI! LOG CHI TIET:"
+            echo "=========================================================="
+            echo "::error::TIEN TRINH BUILD BI LOI! LOG CHI TIET:"
+            echo "=========================================================="
             grep -E -C 3 -i "error:|undefined reference|recipe for target .* failed" build_process.log | tail -n 40
             exit 1
           fi
