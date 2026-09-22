@@ -51,6 +51,14 @@ jobs:
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_V2RAY=y/CONFIG_FIRMWARE_INCLUDE_V2RAY=n/' .config
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_TROJAN=y/CONFIG_FIRMWARE_INCLUDE_TROJAN=n/' .config
           
+          # =================================================================
+          # FIX LỖI GOLANG VÀ CÁC MIRROR CHẾT (DỰA TRÊN LOG LỖI)
+          # Thay thế gomirrors.org bằng máy chủ chính thức của Google
+          # =================================================================
+          echo "Đang vá lỗi link tải Golang trong thư mục tools..."
+          find tools -type f -exec sed -i 's|https://gomirrors.org/dl/go|https://dl.google.com/go|g' {} +
+          find tools -type f -exec sed -i 's|https://mirrors.aliyun.com/golang|https://dl.google.com/go|g' {} +
+          
           # Dọn dẹp và bắt đầu biên dịch
           sudo ./clear_tree_simple
           sudo ./build_firmware_modify "${TNAME}" 0
