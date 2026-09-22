@@ -10,23 +10,45 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-    - name: Checkout
+    - name: Checkout Source
       uses: actions/checkout@v4
 
-    - name: Initialization environment
+    - name: Prepare Environment
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
         sudo apt-get update
         sudo apt-get -y install unzip libtool-bin curl cmake gperf gawk flex bison nano xxd fakeroot \
         cpio git python3-docutils gettext automake autopoint texinfo build-essential help2man \
-        pkg-config zlib1g-dev libgmp-dev libmpc-dev libmpfr-dev libncurses5-dev libltdl-dev wget
+        pkg-config zlib1g-dev libgmp-dev libmpc-dev libmpfr-dev libltdl-dev wget
+        sudo apt-get -y install libncurses5-dev || sudo apt-get -y install libncurses-dev
 
-    - name: Clone source code
+    - name: Setup Toolchain
       run: |
         cd toolchain-mipsel
         sh dl_toolchain.sh
         mkdir -p /opt/images/
+
+    - name: Auto-patch NAND Offset for PB-Boot
+      run: |
+        TARGET_FILE="trunk/linux-3.4.x/drivers/mtd/nand/ralink_nand.c"
+        if [ -f "$TARGET_FILE" ]; then
+          sed -i 's/0x600000/0x200000/g' "$TARGET_FILE"
+          echo "Checked & Patched ralink_nand.c offset to 0x200000 successfully."
+        else
+          echo "Warning: File ralink_nand.c not found at expected path."
+        fi
+
+    - name: Pre-fetch Official AdGuard Home (Softfloat MIPSLE)
+      run: |
+        mkdir -p /tmp/agh
+        curl -sL "https://github.com/AdguardTeam/AdGuardHome/releases/latest/download/AdGuardHome_linux_mipsle_softfloat.tar.gz" -o /tmp/agh/agh.tar.gz
+        tar -zxvf /tmp/agh/agh.tar.gz -C /tmp/agh/
+        mkdir -p trunk/user/adguardhome/bin
+        cp -f /tmp/agh/AdGuardHome/AdGuardHome trunk/user/adguardhome/AdGuardHome
+        cp -f /tmp/agh/AdGuardHome/AdGuardHome trunk/user/adguardhome/bin/AdGuardHome
+        chmod +x trunk/user/adguardhome/AdGuardHome trunk/user/adguardhome/bin/AdGuardHome
+        echo "AdGuard Home binary deployed successfully."
 
     - name: Build Firmware
       env:
@@ -37,58 +59,68 @@ jobs:
         cd trunk
         for m in $TNAME;
         do
-        if [ ! -f configs/templates/$m.config ] ; then
-        echo "configs/templates/$m.config not found "
-        exit 1
-        fi
-        cp -f configs/templates/$m.config .config
-        #####################################################################################
-        sed -i '/CONFIG_FIRMWARE_INCLUDE_MENTOHUST/d' .config
-        sed -i '/CONFIG_FIRMWARE_INCLUDE_SCUTCLIENT/d' .config
-        sed -i '/CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS/d' .config
-        sed -i '/CONFIG_FIRMWARE_INCLUDE_SSSERVER/d' .config
-        sed -i '/CONFIG_FIRMWARE_INCLUDE_DNSFORWARDER/d' .config
-        sed -i '/CONFIG_FIRMWARE_INCLUDE_ADBYBY/d' .config
-        sed -i '/CONFIG_FIRMWARE_INCLUDE_FRPC/d' .config
-        sed -i '/CONFIG_FIRMWARE_INCLUDE_FRPS/d' .config
-        sed -i '/CONFIG_FIRMWARE_INCLUDE_TUNSAFE/d' .config
-        sed -i '/CONFIG_FIRMWARE_INCLUDE_ALIDDNS/d' .config
-        sed -i '/CONFIG_FIRMWARE_INCLUDE_SMARTDNS/d' .config
-        sed -i '/CONFIG_FIRMWARE_INCLUDE_SRELAY/d' .config
-        ######################################################################
-        echo "CONFIG_FIRMWARE_INCLUDE_MENTOHUST=n" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_SCUTCLIENT=n" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=y" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_SSSERVER=n" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_DNSFORWARDER=n" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_ADBYBY=n" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_FRPC=n" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_FRPS=n" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_TUNSAFE=n" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_ALIDDNS=n" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_SMARTDNS=y" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_SMARTDNSBIN=y" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_V2RAY=n" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_TROJAN=n" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_KOOLPROXY=n" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_CADDY=n" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_CADDYBIN=n" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_KUMASOCKS=n" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_ADGUARDHOME=n" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_IPT2SOCKS=n" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_MICROSOCKS=n" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_SRELAY=n" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_WYY=n" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_WYYBIN=n" >> .config
-        echo "CONFIG_FIRMWARE_INCLUDE_ZEROTIER=n" >> .config
-        ####################################################################################
-        sed -i "s/^CONFIG_TOOLCHAIN_DIR=.*$/CONFIG_TOOLCHAIN_DIR=${CONFIG_TOOLCHAIN_DIR}/g" .config
-        sudo ./clear_tree_simple
-        sudo ./build_firmware_modify $m 0
-        sudo mv -f images/*.trx /opt/images/
+          if [ ! -f configs/templates/$m.config ] ; then
+            echo "configs/templates/$m.config not found"
+            exit 1
+          fi
+          cp -f configs/templates/$m.config .config
+          #####################################################################################
+          # Xóa các định nghĩa cũ trong template
+          sed -i '/CONFIG_FIRMWARE_INCLUDE_MENTOHUST/d' .config
+          sed -i '/CONFIG_FIRMWARE_INCLUDE_SCUTCLIENT/d' .config
+          sed -i '/CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS/d' .config
+          sed -i '/CONFIG_FIRMWARE_INCLUDE_SSSERVER/d' .config
+          sed -i '/CONFIG_FIRMWARE_INCLUDE_DNSFORWARDER/d' .config
+          sed -i '/CONFIG_FIRMWARE_INCLUDE_ADBYBY/d' .config
+          sed -i '/CONFIG_FIRMWARE_INCLUDE_FRPC/d' .config
+          sed -i '/CONFIG_FIRMWARE_INCLUDE_FRPS/d' .config
+          sed -i '/CONFIG_FIRMWARE_INCLUDE_TUNSAFE/d' .config
+          sed -i '/CONFIG_FIRMWARE_INCLUDE_ALIDDNS/d' .config
+          sed -i '/CONFIG_FIRMWARE_INCLUDE_SMARTDNS/d' .config
+          sed -i '/CONFIG_FIRMWARE_INCLUDE_SMARTDNSBIN/d' .config
+          sed -i '/CONFIG_FIRMWARE_INCLUDE_SRELAY/d' .config
+          sed -i '/CONFIG_FIRMWARE_INCLUDE_ADGUARDHOME/d' .config
+          sed -i '/CONFIG_FIRMWARE_INCLUDE_WYY/d' .config
+          sed -i '/CONFIG_FIRMWARE_INCLUDE_WYYBIN/d' .config
+          sed -i '/CONFIG_FIRMWARE_INCLUDE_CADDY/d' .config
+          sed -i '/CONFIG_FIRMWARE_INCLUDE_CADDYBIN/d' .config
+          sed -i '/CONFIG_FIRMWARE_INCLUDE_V2RAY/d' .config
+          sed -i '/CONFIG_FIRMWARE_INCLUDE_TROJAN/d' .config
+          sed -i '/CONFIG_FIRMWARE_INCLUDE_ZEROTIER/d' .config
+          #####################################################################################
+          # KÍCH HOẠT TÍNH NĂNG MẠNH MẼ CHO 128MB NAND
+          echo "CONFIG_FIRMWARE_INCLUDE_ADGUARDHOME=y" >> .config
+          echo "CONFIG_FIRMWARE_INCLUDE_SMARTDNS=y" >> .config
+          echo "CONFIG_FIRMWARE_INCLUDE_SMARTDNSBIN=y" >> .config
+          echo "CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=y" >> .config
+          echo "CONFIG_FIRMWARE_INCLUDE_IPT2SOCKS=y" >> .config
+          echo "CONFIG_FIRMWARE_INCLUDE_MICROSOCKS=y" >> .config
+          # TẮT CÁC GÓI LINK CHẾT / RÁC NỘI ĐỊA TRUNG QUỐC
+          echo "CONFIG_FIRMWARE_INCLUDE_MENTOHUST=n" >> .config
+          echo "CONFIG_FIRMWARE_INCLUDE_SCUTCLIENT=n" >> .config
+          echo "CONFIG_FIRMWARE_INCLUDE_SSSERVER=n" >> .config
+          echo "CONFIG_FIRMWARE_INCLUDE_DNSFORWARDER=n" >> .config
+          echo "CONFIG_FIRMWARE_INCLUDE_ADBYBY=n" >> .config
+          echo "CONFIG_FIRMWARE_INCLUDE_FRPC=n" >> .config
+          echo "CONFIG_FIRMWARE_INCLUDE_FRPS=n" >> .config
+          echo "CONFIG_FIRMWARE_INCLUDE_TUNSAFE=n" >> .config
+          echo "CONFIG_FIRMWARE_INCLUDE_ALIDDNS=n" >> .config
+          echo "CONFIG_FIRMWARE_INCLUDE_SRELAY=n" >> .config
+          echo "CONFIG_FIRMWARE_INCLUDE_WYY=n" >> .config
+          echo "CONFIG_FIRMWARE_INCLUDE_WYYBIN=n" >> .config
+          echo "CONFIG_FIRMWARE_INCLUDE_CADDY=n" >> .config
+          echo "CONFIG_FIRMWARE_INCLUDE_CADDYBIN=n" >> .config
+          echo "CONFIG_FIRMWARE_INCLUDE_V2RAY=n" >> .config
+          echo "CONFIG_FIRMWARE_INCLUDE_TROJAN=n" >> .config
+          echo "CONFIG_FIRMWARE_INCLUDE_ZEROTIER=n" >> .config
+          #####################################################################################
+          sed -i "s/^CONFIG_TOOLCHAIN_DIR=.*$/CONFIG_TOOLCHAIN_DIR=${CONFIG_TOOLCHAIN_DIR}/g" .config
+          sudo ./clear_tree_simple
+          sudo ./build_firmware_modify $m 0
+          sudo mv -f images/*.trx /opt/images/
         done
 
-    - name: Upload Artifact
+    - name: Upload Firmware Artifact
       uses: actions/upload-artifact@v4
       with:
         name: Padavan-MI-3
