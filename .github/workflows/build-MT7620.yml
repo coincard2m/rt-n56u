@@ -40,24 +40,38 @@ jobs:
           echo ">>> [2/4] Ep co tuong thich Kernel GCC..."
           find linux-3.4.x -name "Makefile*" -exec sed -i 's/^HOSTCFLAGS\s*:=.*/& -fcommon/' {} + 2>/dev/null || true
 
-          # 3. Vo hieu hoa doan code loi hdr trong ralink_nand.c
-          echo ">>> [3/4] Tat doan check hdr gay loi bien dich trong ralink_nand.c..."
+          # 3. Sử dụng #if 0 ... #endif để vô hiệu hóa hoàn toàn khối parse hdr
+          echo ">>> [3/4] Cat bo hoan toan khoi code hdr gay loi bang #if 0..."
           python3 -c '
-          import glob
+          import glob, re
           files = glob.glob("linux-3.4.x/drivers/mtd/**/ralink_nand.c", recursive=True)
           for fpath in files:
               with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
-                  content = f.read()
-              # Thay the doan if (ret_len == sizeof(hdr)... bang if (0)
-              content = content.replace("if (ret_len == sizeof(hdr)", "if (0 && sizeof(hdr)")
-              # Reset cac gia tri truoc do bi sed lam hong
-              content = content.replace("hdr.size", "hdr.ih_size")
-              content = content.replace("hdr.magic", "hdr.ih_magic")
+                  lines = f.readlines()
+              
+              out = []
+              skip = False
+              for line in lines:
+                  # Khi bắt đầu gặp dòng check hdr, bọc #if 0
+                  if "if (0 && sizeof(hdr)" in line or "if (ret_len == sizeof(hdr)" in line:
+                      out.append("#if 0 /* Vo hieu hoa doan check header bi loi */\n")
+                      out.append(line)
+                      skip = True
+                      continue
+                  # Đóng #endif sau khi gán kernel_size kết thúc (trước khi vào tính partition)
+                  if skip and "kernel_size =" in line:
+                      out.append(line)
+                      out.append("#endif\n")
+                      skip = False
+                      continue
+                  out.append(line)
+              
+              content = "".join(out)
               # Set offset PB-Boot 0x200000
               content = content.replace("0x600000", "0x200000")
               with open(fpath, "w", encoding="utf-8") as f:
                   f.write(content)
-              print(f"Patched: {fpath}")
+              print(f"Patched with #if 0: {fpath}")
           '
 
       - name: Compile Firmware & Auto Diagnostic
