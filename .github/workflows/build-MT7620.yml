@@ -37,8 +37,7 @@ jobs:
           # 2. Ép cờ -fcommon tương thích GCC 11/12
           find linux-3.4.x -name "Makefile*" -exec sed -i 's/^HOSTCFLAGS\s*:=.*/& -fcommon/' {} + 2>/dev/null || true
 
-          # 3. Triệt tiêu hoàn toàn target install_docs trong toan bo Makefile OpenSSL
-          # Chi cho phep chay install_sw (chi copy thu vien va binary, khong tao file HTML man3)
+          # 3. Triệt tiêu hoàn toàn target install_docs trong Makefile OpenSSL
           find libs/libssl -name "Makefile*" -exec sed -i 's/install:.*install_docs.*/install: install_sw/g' {} + 2>/dev/null || true
           find libs/libssl -name "Makefile*" -exec sed -i 's/install_docs//g' {} + 2>/dev/null || true
           find user -name "Makefile*" -exec sed -i 's/install_docs//g' {} + 2>/dev/null || true
@@ -59,13 +58,22 @@ jobs:
           cp -f "configs/templates/${TNAME}.config" .config
           sed -i "s|^CONFIG_TOOLCHAIN_DIR=.*|CONFIG_TOOLCHAIN_DIR=${CONFIG_TOOLCHAIN_DIR}|g" .config
           
-          # Bật lại các cờ OpenSSL cơ bản để libcurl và mạng không bị lỗi thiếu thư viện
+          # Đảm bảo cấu hình OpenSSL cơ bản để libcurl biên dịch thành công
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_HTTPS=n/CONFIG_FIRMWARE_INCLUDE_HTTPS=y/' .config
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EC=n/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EC=y/' .config
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_OPENSSH=y/CONFIG_FIRMWARE_INCLUDE_OPENSSH=n/' .config
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_DROPBEAR=n/CONFIG_FIRMWARE_INCLUDE_DROPBEAR=y/' .config
           
-          # Tắt các binary tải từ nguồn bên thứ ba bên ngoài để chống lỗi 404
+          # Tắt các gói tải qua bintray hoặc link cá nhân đã chết
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_HTOP=y/CONFIG_FIRMWARE_INCLUDE_HTOP=n/' .config
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_NANO=y/CONFIG_FIRMWARE_INCLUDE_NANO=n/' .config
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_IPERF3=y/CONFIG_FIRMWARE_INCLUDE_IPERF3=n/' .config
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_MTR=y/CONFIG_FIRMWARE_INCLUDE_MTR=n/' .config
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_SOCAT=y/CONFIG_FIRMWARE_INCLUDE_SOCAT=n/' .config
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_LRZSZ=y/CONFIG_FIRMWARE_INCLUDE_LRZSZ=n/' .config
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_VLMCSD=y/CONFIG_FIRMWARE_INCLUDE_VLMCSD=n/' .config
+          
+          # Tắt các module proxy/downloader nặng
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_SMARTDNSBIN=y/CONFIG_FIRMWARE_INCLUDE_SMARTDNSBIN=n/' .config
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_V2RAY=y/CONFIG_FIRMWARE_INCLUDE_V2RAY=n/' .config
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_TROJAN=y/CONFIG_FIRMWARE_INCLUDE_TROJAN=n/' .config
