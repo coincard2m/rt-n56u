@@ -27,7 +27,7 @@ jobs:
           sh dl_toolchain.sh
           mkdir -p /opt/images/
 
-      - name: Fix Golang Mirror & GCC Flags & OpenSSL Docs
+      - name: Patch Sources & GCC & OpenSSL Docs
         run: |
           cd trunk
           # 1. Sửa mirror Golang chết link
@@ -37,8 +37,9 @@ jobs:
           # 2. Ép cờ -fcommon tương thích GCC 11/12
           find linux-3.4.x -name "Makefile*" -exec sed -i 's/^HOSTCFLAGS\s*:=.*/& -fcommon/' {} + 2>/dev/null || true
 
-          # 3. Chặn OpenSSL tự copy tài liệu HTML/manpages gây treo/sập build
-          find libs -name "Makefile*" -exec sed -i 's/install_docs//g' {} + 2>/dev/null || true
+          # 3. Triệt tiêu hoàn toàn target install_docs trong toan bo Makefile OpenSSL
+          # Chi cho phep chay install_sw (chi copy thu vien va binary, khong tao file HTML man3)
+          find libs/libssl -name "Makefile*" -exec sed -i 's/install:.*install_docs.*/install: install_sw/g' {} + 2>/dev/null || true
           find libs/libssl -name "Makefile*" -exec sed -i 's/install_docs//g' {} + 2>/dev/null || true
           find user -name "Makefile*" -exec sed -i 's/install_docs//g' {} + 2>/dev/null || true
 
@@ -58,16 +59,13 @@ jobs:
           cp -f "configs/templates/${TNAME}.config" .config
           sed -i "s|^CONFIG_TOOLCHAIN_DIR=.*|CONFIG_TOOLCHAIN_DIR=${CONFIG_TOOLCHAIN_DIR}|g" .config
           
-          # Tự động tắt toàn bộ các gói kéo theo OpenSSL và binary ngoài trực tiếp trên .config
-          sed -i 's/CONFIG_FIRMWARE_INCLUDE_HTTPS=y/CONFIG_FIRMWARE_INCLUDE_HTTPS=n/' .config
-          sed -i 's/CONFIG_FIRMWARE_INCLUDE_SFTP=y/CONFIG_FIRMWARE_INCLUDE_SFTP=n/' .config
-          sed -i 's/CONFIG_FIRMWARE_INCLUDE_DDNS_SSL=y/CONFIG_FIRMWARE_INCLUDE_DDNS_SSL=n/' .config
-          sed -i 's/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EC=y/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EC=n/' .config
-          sed -i 's/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EXE=y/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EXE=n/' .config
-          sed -i 's/CONFIG_FIRMWARE_INCLUDE_EAP_PEAP=y/CONFIG_FIRMWARE_INCLUDE_EAP_PEAP=n/' .config
+          # Bật lại các cờ OpenSSL cơ bản để libcurl và mạng không bị lỗi thiếu thư viện
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_HTTPS=n/CONFIG_FIRMWARE_INCLUDE_HTTPS=y/' .config
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EC=n/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EC=y/' .config
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_OPENSSH=y/CONFIG_FIRMWARE_INCLUDE_OPENSSH=n/' .config
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_DROPBEAR=n/CONFIG_FIRMWARE_INCLUDE_DROPBEAR=y/' .config
           
+          # Tắt các binary tải từ nguồn bên thứ ba bên ngoài để chống lỗi 404
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_SMARTDNSBIN=y/CONFIG_FIRMWARE_INCLUDE_SMARTDNSBIN=n/' .config
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_V2RAY=y/CONFIG_FIRMWARE_INCLUDE_V2RAY=n/' .config
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_TROJAN=y/CONFIG_FIRMWARE_INCLUDE_TROJAN=n/' .config
@@ -75,7 +73,6 @@ jobs:
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_ARIA=y/CONFIG_FIRMWARE_INCLUDE_ARIA=n/' .config
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_ARIA_WEB_CONTROL=y/CONFIG_FIRMWARE_INCLUDE_ARIA_WEB_CONTROL=n/' .config
           
-          # Dọn dẹp và chạy build
           sudo ./clear_tree_simple
           
           set -o pipefail
