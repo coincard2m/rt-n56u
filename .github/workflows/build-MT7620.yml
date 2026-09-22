@@ -1,109 +1,93 @@
-name: Build MT7620
+name: Build Padavan MI-3 (PB-Boot)
 
-on: 
+on:
   workflow_dispatch:
-  release:
-    types: [published]
 
 jobs:
   build:
     runs-on: ubuntu-22.04
-
     steps:
-    - name: Checkout Source
-      uses: actions/checkout@v4
+      - name: Checkout Source
+        uses: actions/checkout@v4
 
-    - name: Prepare Environment
-      env:
-        DEBIAN_FRONTEND: noninteractive
-      run: |
-        sudo apt-get update
-        sudo apt-get -y install unzip libtool-bin curl cmake gperf gawk flex bison nano xxd fakeroot \
-        cpio git python3-docutils gettext automake autopoint texinfo build-essential help2man \
-        pkg-config zlib1g-dev libgmp-dev libmpc-dev libmpfr-dev libltdl-dev wget
-        sudo apt-get -y install libncurses5-dev || sudo apt-get -y install libncurses-dev
+      - name: Prepare Build Environment
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get -y --no-install-recommends install \
+            build-essential libtool-bin curl cmake gperf gawk flex bison xxd fakeroot \
+            cpio git python3-docutils gettext automake autopoint texinfo help2man \
+            pkg-config zlib1g-dev libgmp-dev libmpc-dev libmpfr-dev libltdl-dev wget unzip
+          sudo apt-get -y install libncurses5-dev || sudo apt-get -y install libncurses-dev
 
-    - name: Setup Toolchain
-      run: |
-        cd toolchain-mipsel
-        sh dl_toolchain.sh
-        mkdir -p /opt/images/
-
-    - name: Clean Source & Patch Offset
-      run: |
-        # 1. Trả sạch toàn bộ repo về trạng thái gốc nguyên bản
-        git reset --hard HEAD
-        git clean -fd
-
-        # 2. Vô hiệu hóa lệnh tải Go cũ bị chết link trong tools Makefile
-        if [ -f "trunk/tools/Makefile" ]; then
-          sed -i '/go_build:/,/touch/c\go_build:\n\t@true' trunk/tools/Makefile
-          sed -i 's/go_build//g' trunk/tools/Makefile
-        fi
-        mkdir -p trunk/tools/go/bin
-        touch trunk/tools/go_build_done
-
-        # 3. Vá duy nhất Offset 0x200000 cho phân vùng firmware (PB-Boot)
-        find trunk/linux-3.4.x/drivers/mtd/ -type f -name "*.c" -exec sed -i 's/0x600000/0x200000/g' {} +
-        echo "NAND Offset patched to 0x200000 successfully."
-
-    - name: Build Firmware
-      env:
-        TNAME: "MI-3"
-      run: |
-        cwd=`pwd`
-        CONFIG_TOOLCHAIN_DIR=${cwd//\//\\\/}\\/toolchain-mipsel
-        cd trunk
-        for m in $TNAME;
-        do
-          if [ ! -f configs/templates/$m.config ] ; then
-            echo "configs/templates/$m.config not found"
+      - name: Setup Toolchain
+        run: |
+          cd toolchain-mipsel
+          # Chạy script tải toolchain
+          sh dl_toolchain.sh
+          
+          # Kiểm tra toolchain đã được giải nén thành công hay chưa
+          if [ ! -d "toolchain-3.4.x" ] && [ ! -d "mipsel-linux-uclibc" ]; then
+            echo "::error::Toolchain chua duoc giai nen hoac dl_toolchain.sh bi loi link!"
+            ls -la
             exit 1
           fi
-          cp -f configs/templates/$m.config .config
-          
-          # Hỗ trợ USB định dạng EXT4/FAT để cắm USB cài Entware
-          echo "CONFIG_FIRMWARE_ENABLE_EXT2=y" >> .config
-          echo "CONFIG_FIRMWARE_ENABLE_EXT3=y" >> .config
-          echo "CONFIG_FIRMWARE_ENABLE_EXT4=y" >> .config
-          echo "CONFIG_FIRMWARE_ENABLE_FAT=y" >> .config
-          
-          # Tắt sạch plugin phụ thuộc ngoài
-          sed -i 's/CONFIG_FIRMWARE_INCLUDE_.*=y/CONFIG_FIRMWARE_INCLUDE_&=n/g' .config 2>/dev/null || true
-          echo "CONFIG_FIRMWARE_INCLUDE_MENTOHUST=n" >> .config
-          echo "CONFIG_FIRMWARE_INCLUDE_SCUTCLIENT=n" >> .config
-          echo "CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=n" >> .config
-          echo "CONFIG_FIRMWARE_INCLUDE_SSSERVER=n" >> .config
-          echo "CONFIG_FIRMWARE_INCLUDE_DNSFORWARDER=n" >> .config
-          echo "CONFIG_FIRMWARE_INCLUDE_ADBYBY=n" >> .config
-          echo "CONFIG_FIRMWARE_INCLUDE_FRPC=n" >> .config
-          echo "CONFIG_FIRMWARE_INCLUDE_FRPS=n" >> .config
-          echo "CONFIG_FIRMWARE_INCLUDE_TUNSAFE=n" >> .config
-          echo "CONFIG_FIRMWARE_INCLUDE_ALIDDNS=n" >> .config
-          echo "CONFIG_FIRMWARE_INCLUDE_SMARTDNS=n" >> .config
-          echo "CONFIG_FIRMWARE_INCLUDE_SMARTDNSBIN=n" >> .config
-          echo "CONFIG_FIRMWARE_INCLUDE_SRELAY=n" >> .config
-          echo "CONFIG_FIRMWARE_INCLUDE_WYY=n" >> .config
-          echo "CONFIG_FIRMWARE_INCLUDE_WYYBIN=n" >> .config
-          echo "CONFIG_FIRMWARE_INCLUDE_CADDY=n" >> .config
-          echo "CONFIG_FIRMWARE_INCLUDE_CADDYBIN=n" >> .config
-          echo "CONFIG_FIRMWARE_INCLUDE_V2RAY=n" >> .config
-          echo "CONFIG_FIRMWARE_INCLUDE_TROJAN=n" >> .config
-          echo "CONFIG_FIRMWARE_INCLUDE_ZEROTIER=n" >> .config
-          echo "CONFIG_FIRMWARE_INCLUDE_ADGUARDHOME=n" >> .config
-          echo "CONFIG_FIRMWARE_INCLUDE_KOOLPROXY=n" >> .config
-          
-          # Hạ cờ kiểm tra của GCC để tránh crash do trình biên dịch mới
-          sed -i 's/HOSTCFLAGS   := -Wall -Wmissing-prototypes -Wstrict-prototypes/HOSTCFLAGS   := -Wall -Wno-error/g' linux-3.4.x/Makefile 2>/dev/null || true
+          cd ..
+          mkdir -p /opt/images/
 
-          sed -i "s/^CONFIG_TOOLCHAIN_DIR=.*$/CONFIG_TOOLCHAIN_DIR=${CONFIG_TOOLCHAIN_DIR}/g" .config
+      - name: Patch Kernel Flags & Offset Check
+        run: |
+          cd trunk
+          # Khắc phục lỗi tương thích GCC mới với Kernel 3.4 (chống lỗi compile error)
+          sed -i 's/^HOSTCFLAGS\s*:=.*/& -fcommon/' linux-3.4.x/Makefile || true
+          
+          # Kiểm tra xem bạn đã sửa offset sang 0x200000 cho PB-Boot chưa
+          if grep -q "0x200000" linux-3.4.x/drivers/mtd/nand/ralink_nand.c; then
+            echo ">>> Offset NAND da sua dung chuan: 0x200000 (PB-Boot)"
+          else
+            echo ">>> Canh bao: Offset NAND chua thay doi! Tu dong sua ve 0x200000..."
+            sed -i 's/0x600000/0x200000/g' linux-3.4.x/drivers/mtd/nand/ralink_nand.c
+          fi
+
+      - name: Compile Firmware
+        env:
+          TNAME: "MI-3"
+        run: |
+          ROOTDIR=$(pwd)
+          CONFIG_TOOLCHAIN_DIR="${ROOTDIR}/toolchain-mipsel"
+          
+          cd trunk
+          if [ ! -f "configs/templates/${TNAME}.config" ]; then
+            echo "::error::Khong tim thay file configs/templates/${TNAME}.config!"
+            exit 1
+          fi
+          
+          # Copy cấu hình mẫu và cập nhật đường dẫn toolchain
+          cp -f "configs/templates/${TNAME}.config" .config
+          sed -i "s|^CONFIG_TOOLCHAIN_DIR=.*|CONFIG_TOOLCHAIN_DIR=${CONFIG_TOOLCHAIN_DIR}|g" .config
+          
+          # Đảm bảo các gói phụ trợ kéo ngoài bị tắt sạch để chống 404
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_SMARTDNSBIN=y/CONFIG_FIRMWARE_INCLUDE_SMARTDNSBIN=n/' .config
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_V2RAY=y/CONFIG_FIRMWARE_INCLUDE_V2RAY=n/' .config
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_TROJAN=y/CONFIG_FIRMWARE_INCLUDE_TROJAN=n/' .config
+          
+          # Dọn dẹp và bắt đầu build
           sudo ./clear_tree_simple
-          sudo ./build_firmware_modify $m 0
-          sudo mv -f images/*.trx /opt/images/
-        done
+          sudo ./build_firmware_modify "${TNAME}" 0
+          
+          # Kiểm tra và gom file kết quả
+          if ls images/*.trx 1> /dev/null 2>&1; then
+            sudo mv -f images/*.trx /opt/images/
+            echo ">>> Build hoan tat! Da tao file .trx thanh cong."
+          else
+            echo "::error::Khong tim thay file .trx nao duoc tao ra trong images/!"
+            exit 1
+          fi
 
-    - name: Upload Firmware Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: Padavan-MI-3
-        path: /opt/images/*.trx
+      - name: Upload Firmware Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Padavan-MI-3-Firmware
+          path: /opt/images/*.trx
+          retention-days: 7
