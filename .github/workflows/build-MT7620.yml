@@ -29,20 +29,30 @@ jobs:
         sh dl_toolchain.sh
         mkdir -p /opt/images/
 
-    - name: Fix NAND Driver & Patch Offset
+    - name: Bypass Dead Go Mirror & Patch Kernel
       run: |
+        # 1. Triệt tiêu hoàn toàn lệnh tải Go chết link trong Makefile của tools
+        if [ -f "trunk/tools/Makefile" ]; then
+          sed -i '/go_build:/,/touch/c\go_build:\n\t@true' trunk/tools/Makefile
+          sed -i 's/go_build//g' trunk/tools/Makefile
+          echo "Bypassed dead go_build in trunk/tools/Makefile."
+        fi
+
+        # 2. Tạo sẵn thư mục giả lập go để tránh makefile đòi hỏi
+        mkdir -p trunk/tools/go/bin
+        touch trunk/tools/go_build_done
+
+        # 3. Vá offset 0x200000 cho PB-Boot và hoàn tác tên struct trong driver NAND
         for f in trunk/linux-3.4.x/drivers/mtd/ralink/ralink_nand.c trunk/linux-3.4.x/drivers/mtd/nand/ralink_nand.c; do
           if [ -f "$f" ]; then
-            # Sửa lại các biến bị gõ nhầm thành chuẩn gốc
             sed -i 's/hdr\.ih_magic/hdr.magic/g' "$f"
             sed -i 's/hdr\.ih_ksz/hdr.size/g' "$f"
-            # Chuyển offset về 0x200000 cho PB-Boot
             sed -i 's/0x600000/0x200000/g' "$f"
             echo "Patched $f successfully."
           fi
         done
 
-    - name: Build Clean Firmware
+    - name: Build Firmware
       env:
         TNAME: "MI-3"
       run: |
@@ -57,13 +67,13 @@ jobs:
           fi
           cp -f configs/templates/$m.config .config
           
-          # Đảm bảo bật hỗ trợ USB, định dạng Ext4/FAT32 để cắm USB cài Entware
+          # Đảm bảo bật định dạng ổ đĩa USB để sau này cài Entware
           echo "CONFIG_FIRMWARE_ENABLE_EXT2=y" >> .config
           echo "CONFIG_FIRMWARE_ENABLE_EXT3=y" >> .config
           echo "CONFIG_FIRMWARE_ENABLE_EXT4=y" >> .config
           echo "CONFIG_FIRMWARE_ENABLE_FAT=y" >> .config
           
-          # Tắt sạch toàn bộ các plugin cài cắm rác ngoài mã nguồn
+          # Tắt toàn bộ plugin rác / phụ thuộc bên ngoài
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_.*=y/CONFIG_FIRMWARE_INCLUDE_&=n/g' .config 2>/dev/null || true
           echo "CONFIG_FIRMWARE_INCLUDE_MENTOHUST=n" >> .config
           echo "CONFIG_FIRMWARE_INCLUDE_SCUTCLIENT=n" >> .config
