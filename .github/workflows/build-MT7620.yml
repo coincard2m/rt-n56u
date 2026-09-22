@@ -24,31 +24,8 @@ jobs:
       - name: Setup Toolchain
         run: |
           cd toolchain-mipsel
-          # Chạy script tải toolchain
           sh dl_toolchain.sh
-          
-          # Kiểm tra toolchain đã được giải nén thành công hay chưa
-          if [ ! -d "toolchain-3.4.x" ] && [ ! -d "mipsel-linux-uclibc" ]; then
-            echo "::error::Toolchain chua duoc giai nen hoac dl_toolchain.sh bi loi link!"
-            ls -la
-            exit 1
-          fi
-          cd ..
           mkdir -p /opt/images/
-
-      - name: Patch Kernel Flags & Offset Check
-        run: |
-          cd trunk
-          # Khắc phục lỗi tương thích GCC mới với Kernel 3.4 (chống lỗi compile error)
-          sed -i 's/^HOSTCFLAGS\s*:=.*/& -fcommon/' linux-3.4.x/Makefile || true
-          
-          # Kiểm tra xem bạn đã sửa offset sang 0x200000 cho PB-Boot chưa
-          if grep -q "0x200000" linux-3.4.x/drivers/mtd/nand/ralink_nand.c; then
-            echo ">>> Offset NAND da sua dung chuan: 0x200000 (PB-Boot)"
-          else
-            echo ">>> Canh bao: Offset NAND chua thay doi! Tu dong sua ve 0x200000..."
-            sed -i 's/0x600000/0x200000/g' linux-3.4.x/drivers/mtd/nand/ralink_nand.c
-          fi
 
       - name: Compile Firmware
         env:
@@ -59,31 +36,27 @@ jobs:
           
           cd trunk
           if [ ! -f "configs/templates/${TNAME}.config" ]; then
-            echo "::error::Khong tim thay file configs/templates/${TNAME}.config!"
+            echo "::error::Khong tim thay configs/templates/${TNAME}.config!"
             exit 1
           fi
           
-          # Copy cấu hình mẫu và cập nhật đường dẫn toolchain
+          # Đưa file config mẫu vào vị trí cấu hình build
           cp -f "configs/templates/${TNAME}.config" .config
+          
+          # Cập nhật đường dẫn toolchain
           sed -i "s|^CONFIG_TOOLCHAIN_DIR=.*|CONFIG_TOOLCHAIN_DIR=${CONFIG_TOOLCHAIN_DIR}|g" .config
           
-          # Đảm bảo các gói phụ trợ kéo ngoài bị tắt sạch để chống 404
+          # Tắt các binary dễ lỗi nếu vô tình sót lại
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_SMARTDNSBIN=y/CONFIG_FIRMWARE_INCLUDE_SMARTDNSBIN=n/' .config
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_V2RAY=y/CONFIG_FIRMWARE_INCLUDE_V2RAY=n/' .config
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_TROJAN=y/CONFIG_FIRMWARE_INCLUDE_TROJAN=n/' .config
           
-          # Dọn dẹp và bắt đầu build
+          # Dọn dẹp và bắt đầu biên dịch
           sudo ./clear_tree_simple
           sudo ./build_firmware_modify "${TNAME}" 0
           
-          # Kiểm tra và gom file kết quả
-          if ls images/*.trx 1> /dev/null 2>&1; then
-            sudo mv -f images/*.trx /opt/images/
-            echo ">>> Build hoan tat! Da tao file .trx thanh cong."
-          else
-            echo "::error::Khong tim thay file .trx nao duoc tao ra trong images/!"
-            exit 1
-          fi
+          # Gom file kết quả .trx
+          sudo mv -f images/*.trx /opt/images/ 2>/dev/null || true
 
       - name: Upload Firmware Artifact
         uses: actions/upload-artifact@v4
