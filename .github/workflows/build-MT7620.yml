@@ -73,20 +73,25 @@ jobs:
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_LANG_RU=y/CONFIG_FIRMWARE_INCLUDE_LANG_RU=n/' .config
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_LANG_UK=y/CONFIG_FIRMWARE_INCLUDE_LANG_UK=n/' .config
           
-          # --- 2. CẤU HÌNH BẬT TẤT CẢ DRIVER USB & Ổ CỨNG (KHÔNG SỢ READ-ONLY) ---
+          # --- 2. CẤU HÌNH DRIVER USB ĐẦY ĐỦ ---
           for opt in ENABLE_USB ENABLE_UFSD ENABLE_FAT ENABLE_EXFAT ENABLE_EXT2 ENABLE_EXT3 ENABLE_EXT4 ENABLE_FUSE ENABLE_SWAP; do
             sed -i "s/CONFIG_FIRMWARE_${opt}=n/CONFIG_FIRMWARE_${opt}=y/" .config
             grep -q "CONFIG_FIRMWARE_${opt}=y" .config || echo "CONFIG_FIRMWARE_${opt}=y" >> .config
           done
 
-          # --- 3. CẤU HÌNH CỐT LÕI: WIREGUARD, OPENVPN, IPSET, OPENSSL, DROPBEAR ---
-          for opt in INCLUDE_HTTPS INCLUDE_OPENSSL_EC INCLUDE_OPENSSL_EXE INCLUDE_DROPBEAR INCLUDE_WIREGUARD INCLUDE_OPENVPN INCLUDE_IPSET INCLUDE_IPMARK INCLUDE_SHAPER INCLUDE_CURL INCLUDE_WGET; do
+          # --- 3. BẬT WIREGUARD, OPENVPN, IPSET, DROPBEAR, HTTPS ---
+          for opt in INCLUDE_HTTPS INCLUDE_OPENSSL_EC INCLUDE_DROPBEAR INCLUDE_WIREGUARD INCLUDE_OPENVPN INCLUDE_IPSET INCLUDE_IPMARK INCLUDE_SHAPER INCLUDE_CURL INCLUDE_WGET; do
             sed -i "s/CONFIG_FIRMWARE_${opt}=n/CONFIG_FIRMWARE_${opt}=y/" .config
             grep -q "CONFIG_FIRMWARE_${opt}=y" .config || echo "CONFIG_FIRMWARE_${opt}=y" >> .config
           done
+
+          # --- 4. TẮT CHẶT CÁC THỨ DƯ THỪA GÂY LỖI BIÊN DỊCH ---
+          # Ép tắt công cụ dòng lệnh OpenSSL để triệt tiêu lỗi copy tài liệu HTML
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EXE=y/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EXE=n/' .config
+          grep -q "CONFIG_FIRMWARE_INCLUDE_OPENSSL_EXE=n" .config || echo "CONFIG_FIRMWARE_INCLUDE_OPENSSL_EXE=n" >> .config
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_OPENSSH=y/CONFIG_FIRMWARE_INCLUDE_OPENSSH=n/' .config
 
-          # --- 4. ÉP TẮT TOÀN BỘ CÁC GÓI BINTRAY 410 GONE & GÓI CHẾT LINK ---
+          # Ép tắt toàn bộ các gói Bintray chết link 410 Gone
           for opt in HTOP NANO IPERF3 MTR SOCAT LRZSZ VLMCSD SMARTDNSBIN V2RAY TROJAN SHADOWSOCKS SSSERVER ARIA ARIA_WEB_CONTROL TRANSMISSION TRANSMISSION_WEB_CONTROL TUNSAFE SOFTETHERVPN_SERVER SOFTETHERVPN_CLIENT SOFTETHERVPN_CMD; do
             sed -i "s/CONFIG_FIRMWARE_${opt}=y/CONFIG_FIRMWARE_${opt}=n/" .config
             grep -q "CONFIG_FIRMWARE_${opt}=n" .config || echo "CONFIG_FIRMWARE_${opt}=n" >> .config
