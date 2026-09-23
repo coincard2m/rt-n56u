@@ -63,37 +63,34 @@ jobs:
           cp -f "configs/templates/${TNAME}.config" .config
           sed -i "s|^CONFIG_TOOLCHAIN_DIR=.*|CONFIG_TOOLCHAIN_DIR=${CONFIG_TOOLCHAIN_DIR}|g" .config
           
-          # --- CẤU HÌNH NGÔN NGỮ (BẬT EN + KÊNH CN ĐÃ GÁN TIẾNG VIỆT) ---
+          # --- 1. CẤU HÌNH NGÔN NGỮ (BẬT EN + KÊNH CN ĐÃ GÁN TIẾNG VIỆT) ---
           sed -i 's/CONFIG_FIRMWARE_ENABLE_LANG_SELECT=n/CONFIG_FIRMWARE_ENABLE_LANG_SELECT=y/' .config
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_LANG_EN=n/CONFIG_FIRMWARE_INCLUDE_LANG_EN=y/' .config
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_LANG_CN=n/CONFIG_FIRMWARE_INCLUDE_LANG_CN=y/' .config
           grep -q "CONFIG_FIRMWARE_ENABLE_LANG_SELECT=y" .config || echo "CONFIG_FIRMWARE_ENABLE_LANG_SELECT=y" >> .config
           grep -q "CONFIG_FIRMWARE_INCLUDE_LANG_EN=y" .config || echo "CONFIG_FIRMWARE_INCLUDE_LANG_EN=y" >> .config
           grep -q "CONFIG_FIRMWARE_INCLUDE_LANG_CN=y" .config || echo "CONFIG_FIRMWARE_INCLUDE_LANG_CN=y" >> .config
-          
-          # Tắt tiếng Nga/Ukraina để nhẹ ROM
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_LANG_RU=y/CONFIG_FIRMWARE_INCLUDE_LANG_RU=n/' .config
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_LANG_UK=y/CONFIG_FIRMWARE_INCLUDE_LANG_UK=n/' .config
           
-          # --- CẤU HÌNH OPENSSL CƠ BẢN VÀ DROPBEAR ---
-          sed -i 's/CONFIG_FIRMWARE_INCLUDE_HTTPS=n/CONFIG_FIRMWARE_INCLUDE_HTTPS=y/' .config
-          sed -i 's/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EC=n/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EC=y/' .config
-          sed -i 's/CONFIG_FIRMWARE_INCLUDE_OPENSSH=y/CONFIG_FIRMWARE_INCLUDE_OPENSSH=n/' .config
-          sed -i 's/CONFIG_FIRMWARE_INCLUDE_DROPBEAR=n/CONFIG_FIRMWARE_INCLUDE_DROPBEAR=y/' .config
+          # --- 2. CẤU HÌNH BẬT TẤT CẢ DRIVER USB & Ổ CỨNG (KHÔNG SỢ READ-ONLY) ---
+          for opt in ENABLE_USB ENABLE_UFSD ENABLE_FAT ENABLE_EXFAT ENABLE_EXT2 ENABLE_EXT3 ENABLE_EXT4 ENABLE_FUSE ENABLE_SWAP; do
+            sed -i "s/CONFIG_FIRMWARE_${opt}=n/CONFIG_FIRMWARE_${opt}=y/" .config
+            grep -q "CONFIG_FIRMWARE_${opt}=y" .config || echo "CONFIG_FIRMWARE_${opt}=y" >> .config
+          done
 
-          # --- ÉP BẬT VPN & ĐỊNH TUYẾN ---
-          sed -i 's/CONFIG_FIRMWARE_INCLUDE_WIREGUARD=n/CONFIG_FIRMWARE_INCLUDE_WIREGUARD=y/' .config
-          sed -i 's/CONFIG_FIRMWARE_INCLUDE_OPENVPN=n/CONFIG_FIRMWARE_INCLUDE_OPENVPN=y/' .config
-          sed -i 's/CONFIG_FIRMWARE_INCLUDE_IPSET=n/CONFIG_FIRMWARE_INCLUDE_IPSET=y/' .config
-          sed -i 's/CONFIG_FIRMWARE_INCLUDE_IPMARK=n/CONFIG_FIRMWARE_INCLUDE_IPMARK=y/' .config
-          
-          # --- TẮT CÁC GÓI LINK BINTRAY HOẶC DOWNLOADER NẶNG (TRÁNH LỖI CHẾT LINK) ---
-          sed -i 's/CONFIG_FIRMWARE_INCLUDE_SMARTDNSBIN=y/CONFIG_FIRMWARE_INCLUDE_SMARTDNSBIN=n/' .config
-          sed -i 's/CONFIG_FIRMWARE_INCLUDE_V2RAY=y/CONFIG_FIRMWARE_INCLUDE_V2RAY=n/' .config
-          sed -i 's/CONFIG_FIRMWARE_INCLUDE_TROJAN=y/CONFIG_FIRMWARE_INCLUDE_TROJAN=n/' .config
-          sed -i 's/CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=y/CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=n/' .config
-          sed -i 's/CONFIG_FIRMWARE_INCLUDE_ARIA=y/CONFIG_FIRMWARE_INCLUDE_ARIA=n/' .config
-          sed -i 's/CONFIG_FIRMWARE_INCLUDE_ARIA_WEB_CONTROL=y/CONFIG_FIRMWARE_INCLUDE_ARIA_WEB_CONTROL=n/' .config
+          # --- 3. CẤU HÌNH CỐT LÕI: WIREGUARD, OPENVPN, IPSET, OPENSSL, DROPBEAR ---
+          for opt in INCLUDE_HTTPS INCLUDE_OPENSSL_EC INCLUDE_OPENSSL_EXE INCLUDE_DROPBEAR INCLUDE_WIREGUARD INCLUDE_OPENVPN INCLUDE_IPSET INCLUDE_IPMARK INCLUDE_SHAPER INCLUDE_CURL INCLUDE_WGET; do
+            sed -i "s/CONFIG_FIRMWARE_${opt}=n/CONFIG_FIRMWARE_${opt}=y/" .config
+            grep -q "CONFIG_FIRMWARE_${opt}=y" .config || echo "CONFIG_FIRMWARE_${opt}=y" >> .config
+          done
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_OPENSSH=y/CONFIG_FIRMWARE_INCLUDE_OPENSSH=n/' .config
+
+          # --- 4. ÉP TẮT TOÀN BỘ CÁC GÓI BINTRAY 410 GONE & GÓI CHẾT LINK ---
+          for opt in HTOP NANO IPERF3 MTR SOCAT LRZSZ VLMCSD SMARTDNSBIN V2RAY TROJAN SHADOWSOCKS SSSERVER ARIA ARIA_WEB_CONTROL TRANSMISSION TRANSMISSION_WEB_CONTROL TUNSAFE SOFTETHERVPN_SERVER SOFTETHERVPN_CLIENT SOFTETHERVPN_CMD; do
+            sed -i "s/CONFIG_FIRMWARE_${opt}=y/CONFIG_FIRMWARE_${opt}=n/" .config
+            grep -q "CONFIG_FIRMWARE_${opt}=n" .config || echo "CONFIG_FIRMWARE_${opt}=n" >> .config
+          done
           
           sudo ./clear_tree_simple
           
