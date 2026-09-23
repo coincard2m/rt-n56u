@@ -31,28 +31,17 @@ jobs:
         run: |
           cd trunk
           
-          # 1. Tải file từ điển Tiếng Việt
-          mkdir -p user/www/dict
-          wget -q --no-check-certificate -O user/www/dict/VN.dict https://raw.githubusercontent.com/daivietpda/PDVN-LANG/master/VN.dict || true
-
-          # 2. Patch CSS logo tự co dãn vừa khít khung 150x71, căn giữa
+          # 1. Patch CSS để logo hiển thị tự co dãn vừa khít khung 150x71, không tràn ảnh
           find user/www -name "main.css" -exec sed -i 's|width: 150px;|width: 150px; background-size: contain; background-repeat: no-repeat; background-position: center;|g' {} +
 
-          # 3. Đồng bộ file ảnh logo sang toàn bộ theme
-          LOGO_SRC=$(find user/www -name "asus_logo.png" -o -name "logo.png" | head -n 1)
-          if [ -n "$LOGO_SRC" ] && [ -f "$LOGO_SRC" ]; then
-            find user/www -name "asus_logo.png" -exec cp -f "$LOGO_SRC" {} +
-            find user/www -name "logo.png" -exec cp -f "$LOGO_SRC" {} +
-          fi
-
-          # 4. Khắc phục link Golang chết
+          # 2. Khắc phục link Golang chết
           find tools -type f -exec sed -i 's|https://gomirrors.org/dl/go|https://dl.google.com/go|g' {} + 2>/dev/null || true
           find tools -type f -exec sed -i 's|https://mirrors.aliyun.com/golang|https://dl.google.com/go|g' {} + 2>/dev/null || true
           
-          # 5. Ép cờ -fcommon tương thích GCC 11/12
+          # 3. Ép cờ -fcommon tương thích GCC 11/12
           find linux-3.4.x -name "Makefile*" -exec sed -i 's/^HOSTCFLAGS\s*:=.*/& -fcommon/' {} + 2>/dev/null || true
 
-          # 6. Triệt tiêu hoàn toàn target install_docs trong Makefile OpenSSL
+          # 4. Triệt tiêu hoàn toàn target install_docs trong Makefile OpenSSL
           find libs/libssl -name "Makefile*" -exec sed -i 's/install:.*install_docs.*/install: install_sw/g' {} + 2>/dev/null || true
           find libs/libssl -name "Makefile*" -exec sed -i 's/install_docs//g' {} + 2>/dev/null || true
           find user -name "Makefile*" -exec sed -i 's/install_docs//g' {} + 2>/dev/null || true
@@ -73,13 +62,17 @@ jobs:
           cp -f "configs/templates/${TNAME}.config" .config
           sed -i "s|^CONFIG_TOOLCHAIN_DIR=.*|CONFIG_TOOLCHAIN_DIR=${CONFIG_TOOLCHAIN_DIR}|g" .config
           
-          # --- CẤU HÌNH NGÔN NGỮ (BẬT EN + KÊNH CN CHO TIẾNG VIỆT) ---
+          # --- CẤU HÌNH NGÔN NGỮ (BẬT EN + KÊNH CN ĐÃ GÁN TIẾNG VIỆT) ---
           sed -i 's/CONFIG_FIRMWARE_ENABLE_LANG_SELECT=n/CONFIG_FIRMWARE_ENABLE_LANG_SELECT=y/' .config
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_LANG_EN=n/CONFIG_FIRMWARE_INCLUDE_LANG_EN=y/' .config
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_LANG_CN=n/CONFIG_FIRMWARE_INCLUDE_LANG_CN=y/' .config
           grep -q "CONFIG_FIRMWARE_ENABLE_LANG_SELECT=y" .config || echo "CONFIG_FIRMWARE_ENABLE_LANG_SELECT=y" >> .config
           grep -q "CONFIG_FIRMWARE_INCLUDE_LANG_EN=y" .config || echo "CONFIG_FIRMWARE_INCLUDE_LANG_EN=y" >> .config
           grep -q "CONFIG_FIRMWARE_INCLUDE_LANG_CN=y" .config || echo "CONFIG_FIRMWARE_INCLUDE_LANG_CN=y" >> .config
+          
+          # Tắt tiếng Nga/Ukraina để nhẹ ROM
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_LANG_RU=y/CONFIG_FIRMWARE_INCLUDE_LANG_RU=n/' .config
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_LANG_UK=y/CONFIG_FIRMWARE_INCLUDE_LANG_UK=n/' .config
           
           # --- CẤU HÌNH OPENSSL CƠ BẢN VÀ DROPBEAR ---
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_HTTPS=n/CONFIG_FIRMWARE_INCLUDE_HTTPS=y/' .config
