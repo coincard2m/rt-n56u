@@ -47,6 +47,14 @@ jobs:
           find libs/libssl -name "Makefile*" -exec sed -i 's/install_docs//g' {} + 2>/dev/null || true
           find user -name "Makefile*" -exec sed -i 's/install_docs//g' {} + 2>/dev/null || true
 
+          # 5. Triệt tiêu hoàn toàn các module Bintray chết link khỏi user/Makefile
+          sed -i 's/dir_$(CONFIG_FIRMWARE_INCLUDE_HTOP)\s*+= htop//g' user/Makefile 2>/dev/null || true
+          sed -i 's/dir_y += htop//g' user/Makefile 2>/dev/null || true
+          sed -i 's/dir_$(CONFIG_FIRMWARE_INCLUDE_NANO)\s*+= nano//g' user/Makefile 2>/dev/null || true
+          sed -i 's/dir_y += nano//g' user/Makefile 2>/dev/null || true
+          sed -i 's/dir_$(CONFIG_FIRMWARE_INCLUDE_IPERF3)\s*+= iperf3//g' user/Makefile 2>/dev/null || true
+          sed -i 's/dir_y += iperf3//g' user/Makefile 2>/dev/null || true
+
       - name: Compile Firmware
         env:
           TNAME: "MI-3"
@@ -55,49 +63,24 @@ jobs:
           CONFIG_TOOLCHAIN_DIR="${ROOTDIR}/toolchain-mipsel"
           
           cd trunk
+          
+          # Dọn dẹp trước khi nạp config
+          sudo ./clear_tree_simple
+
           if [ ! -f "configs/templates/${TNAME}.config" ]; then
             echo "::error::Khong tim thay file configs/templates/${TNAME}.config!"
             exit 1
           fi
           
+          # Copy file template sạch vào .config
           cp -f "configs/templates/${TNAME}.config" .config
           sed -i "s|^CONFIG_TOOLCHAIN_DIR=.*|CONFIG_TOOLCHAIN_DIR=${CONFIG_TOOLCHAIN_DIR}|g" .config
           
-          # --- 1. CẤU HÌNH NGÔN NGỮ (BẬT EN + KÊNH CN ĐÃ GÁN TIẾNG VIỆT) ---
-          sed -i 's/CONFIG_FIRMWARE_ENABLE_LANG_SELECT=n/CONFIG_FIRMWARE_ENABLE_LANG_SELECT=y/' .config
-          sed -i 's/CONFIG_FIRMWARE_INCLUDE_LANG_EN=n/CONFIG_FIRMWARE_INCLUDE_LANG_EN=y/' .config
-          sed -i 's/CONFIG_FIRMWARE_INCLUDE_LANG_CN=n/CONFIG_FIRMWARE_INCLUDE_LANG_CN=y/' .config
-          grep -q "CONFIG_FIRMWARE_ENABLE_LANG_SELECT=y" .config || echo "CONFIG_FIRMWARE_ENABLE_LANG_SELECT=y" >> .config
-          grep -q "CONFIG_FIRMWARE_INCLUDE_LANG_EN=y" .config || echo "CONFIG_FIRMWARE_INCLUDE_LANG_EN=y" >> .config
-          grep -q "CONFIG_FIRMWARE_INCLUDE_LANG_CN=y" .config || echo "CONFIG_FIRMWARE_INCLUDE_LANG_CN=y" >> .config
-          sed -i 's/CONFIG_FIRMWARE_INCLUDE_LANG_RU=y/CONFIG_FIRMWARE_INCLUDE_LANG_RU=n/' .config
-          sed -i 's/CONFIG_FIRMWARE_INCLUDE_LANG_UK=y/CONFIG_FIRMWARE_INCLUDE_LANG_UK=n/' .config
-          
-          # --- 2. CẤU HÌNH DRIVER USB ĐẦY ĐỦ ---
-          for opt in ENABLE_USB ENABLE_UFSD ENABLE_FAT ENABLE_EXFAT ENABLE_EXT2 ENABLE_EXT3 ENABLE_EXT4 ENABLE_FUSE ENABLE_SWAP; do
-            sed -i "s/CONFIG_FIRMWARE_${opt}=n/CONFIG_FIRMWARE_${opt}=y/" .config
-            grep -q "CONFIG_FIRMWARE_${opt}=y" .config || echo "CONFIG_FIRMWARE_${opt}=y" >> .config
-          done
-
-          # --- 3. BẬT WIREGUARD, OPENVPN, IPSET, DROPBEAR, HTTPS ---
-          for opt in INCLUDE_HTTPS INCLUDE_OPENSSL_EC INCLUDE_DROPBEAR INCLUDE_WIREGUARD INCLUDE_OPENVPN INCLUDE_IPSET INCLUDE_IPMARK INCLUDE_SHAPER INCLUDE_CURL INCLUDE_WGET; do
-            sed -i "s/CONFIG_FIRMWARE_${opt}=n/CONFIG_FIRMWARE_${opt}=y/" .config
-            grep -q "CONFIG_FIRMWARE_${opt}=y" .config || echo "CONFIG_FIRMWARE_${opt}=y" >> .config
-          done
-
-          # --- 4. TẮT CHẶT CÁC THỨ DƯ THỪA GÂY LỖI BIÊN DỊCH ---
-          # Ép tắt công cụ dòng lệnh OpenSSL để triệt tiêu lỗi copy tài liệu HTML
+          # Khóa an toàn bổ sung trên .config
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EXE=y/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EXE=n/' .config
-          grep -q "CONFIG_FIRMWARE_INCLUDE_OPENSSL_EXE=n" .config || echo "CONFIG_FIRMWARE_INCLUDE_OPENSSL_EXE=n" >> .config
-          sed -i 's/CONFIG_FIRMWARE_INCLUDE_OPENSSH=y/CONFIG_FIRMWARE_INCLUDE_OPENSSH=n/' .config
-
-          # Ép tắt toàn bộ các gói Bintray chết link 410 Gone
-          for opt in HTOP NANO IPERF3 MTR SOCAT LRZSZ VLMCSD SMARTDNSBIN V2RAY TROJAN SHADOWSOCKS SSSERVER ARIA ARIA_WEB_CONTROL TRANSMISSION TRANSMISSION_WEB_CONTROL TUNSAFE SOFTETHERVPN_SERVER SOFTETHERVPN_CLIENT SOFTETHERVPN_CMD; do
-            sed -i "s/CONFIG_FIRMWARE_${opt}=y/CONFIG_FIRMWARE_${opt}=n/" .config
-            grep -q "CONFIG_FIRMWARE_${opt}=n" .config || echo "CONFIG_FIRMWARE_${opt}=n" >> .config
-          done
-          
-          sudo ./clear_tree_simple
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_HTOP=y/CONFIG_FIRMWARE_INCLUDE_HTOP=n/' .config
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_NANO=y/CONFIG_FIRMWARE_INCLUDE_NANO=n/' .config
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_IPERF3=y/CONFIG_FIRMWARE_INCLUDE_IPERF3=n/' .config
           
           set -o pipefail
           sudo ./build_firmware_modify "${TNAME}" 0 2>&1 | tee build_process.log || BUILD_FAILED=1
