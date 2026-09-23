@@ -2442,13 +2442,39 @@ static int __init ra_nand_init(void)
 	mutex_init(ra->controller);
 
 #if !defined (CONFIG_MTD_NAND_USE_UBI_PART)
-	/* Set truc tiep offset 0x200000 cho PB-Boot Mi Router 3 */
+	/* 1. Set offset Kernel cho PB-Boot tai 0x200000 (2MB) */
 	rt2880_partitions[NAND_MTD_KERNEL_PART_IDX].offset = 0x200000;
 	rt2880_partitions[ARRAY_SIZE(rt2880_partitions) - 1].offset = 0x200000;
-	kernel_size = 0x200000;
+
+	/* 2. Quet tim vi tri thuc cua RootFS (SquashFS Magic "sqsh" / "hsqs") */
+	{
+		uint32_t scan_addr;
+		uint32_t magic = 0;
+		size_t ret_len = 0;
+		uint32_t found_rootfs = 0;
+
+		/* Quet tu 0x200000 + 1MB den 0x200000 + 4MB theo tung buoc 64KB */
+		for (scan_addr = 0x300000; scan_addr < 0x600000; scan_addr += 0x10000) {
+			magic = 0;
+			ramtd_nand_read(ranfc_mtd, scan_addr, 4, &ret_len, (u_char *)(&magic));
+			if (magic == 0x73717368 || magic == 0x68737173) {
+				found_rootfs = scan_addr;
+				printk(KERN_INFO "ralink_nand: [PB-Boot] Tim thay SquashFS tai 0x%08x!\n", scan_addr);
+				break;
+			}
+		}
+
+		if (found_rootfs) {
+			kernel_size = found_rootfs - 0x200000;
+		} else {
+			kernel_size = 0x200000;
+		}
+		printk(KERN_INFO "ralink_nand: [PB-Boot] Kernel size tinh duoc: 0x%x\n", kernel_size);
+	}
 
 	/* calculate partition table */
 	recalc_partitions(ranfc_mtd->size, kernel_size);
+
 #else
 	/* calculate partition table for UBIFS */
 	recalc_partitions(ranfc_mtd->size);
