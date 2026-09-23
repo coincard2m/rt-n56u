@@ -18,8 +18,7 @@ jobs:
           sudo apt-get -y --no-install-recommends install \
             build-essential libtool-bin curl cmake gperf gawk flex bison xxd fakeroot \
             cpio git python3-docutils gettext automake autopoint texinfo help2man \
-            pkg-config zlib1g-dev libgmp-dev libmpc-dev libmpfr-dev libltdl-dev wget unzip \
-            liblz4-dev liblzo2-dev
+            pkg-config zlib1g-dev libgmp-dev libmpc-dev libmpfr-dev libltdl-dev wget unzip
           sudo apt-get -y install libncurses5-dev || sudo apt-get -y install libncurses-dev
 
       - name: Setup Toolchain
@@ -28,7 +27,7 @@ jobs:
           sh dl_toolchain.sh
           mkdir -p /opt/images/
 
-      - name: Patch Sources & Languages & OpenSSL
+      - name: Patch Sources & Languages & Fixes
         run: |
           cd trunk
           
@@ -76,11 +75,40 @@ jobs:
           cp -f "configs/templates/${TNAME}.config" .config
           sed -i "s|^CONFIG_TOOLCHAIN_DIR=.*|CONFIG_TOOLCHAIN_DIR=${CONFIG_TOOLCHAIN_DIR}|g" .config
           
-          # Khóa an toàn bổ sung trên .config
+          # --- 1. CẤU HÌNH NGÔN NGỮ (BẬT EN + KÊNH CN ĐÃ GÁN TIẾNG VIỆT) ---
+          sed -i 's/CONFIG_FIRMWARE_ENABLE_LANG_SELECT=n/CONFIG_FIRMWARE_ENABLE_LANG_SELECT=y/' .config
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_LANG_EN=n/CONFIG_FIRMWARE_INCLUDE_LANG_EN=y/' .config
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_LANG_CN=n/CONFIG_FIRMWARE_INCLUDE_LANG_CN=y/' .config
+          grep -q "CONFIG_FIRMWARE_ENABLE_LANG_SELECT=y" .config || echo "CONFIG_FIRMWARE_ENABLE_LANG_SELECT=y" >> .config
+          grep -q "CONFIG_FIRMWARE_INCLUDE_LANG_EN=y" .config || echo "CONFIG_FIRMWARE_INCLUDE_LANG_EN=y" >> .config
+          grep -q "CONFIG_FIRMWARE_INCLUDE_LANG_CN=y" .config || echo "CONFIG_FIRMWARE_INCLUDE_LANG_CN=y" >> .config
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_LANG_RU=y/CONFIG_FIRMWARE_INCLUDE_LANG_RU=n/' .config
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_LANG_UK=y/CONFIG_FIRMWARE_INCLUDE_LANG_UK=n/' .config
+          
+          # --- 2. CẤU HÌNH DRIVER USB ĐẦY ĐỦ ---
+          for opt in ENABLE_USB ENABLE_UFSD ENABLE_FAT ENABLE_EXFAT ENABLE_EXT2 ENABLE_EXT3 ENABLE_EXT4 ENABLE_FUSE ENABLE_SWAP; do
+            sed -i "s/CONFIG_FIRMWARE_${opt}=n/CONFIG_FIRMWARE_${opt}=y/" .config
+            grep -q "CONFIG_FIRMWARE_${opt}=y" .config || echo "CONFIG_FIRMWARE_${opt}=y" >> .config
+          done
+
+          # --- 3. BẬT WIREGUARD, IPSET, DROPBEAR, HTTPS ---
+          for opt in INCLUDE_HTTPS INCLUDE_OPENSSL_EC INCLUDE_DROPBEAR INCLUDE_WIREGUARD INCLUDE_IPSET INCLUDE_IPMARK INCLUDE_SHAPER INCLUDE_CURL INCLUDE_WGET; do
+            sed -i "s/CONFIG_FIRMWARE_${opt}=n/CONFIG_FIRMWARE_${opt}=y/" .config
+            grep -q "CONFIG_FIRMWARE_${opt}=y" .config || echo "CONFIG_FIRMWARE_${opt}=y" >> .config
+          done
+
+          # --- 4. TẮT HẲN OPENVPN VÀ OPENSSL_EXE ---
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_OPENVPN=y/CONFIG_FIRMWARE_INCLUDE_OPENVPN=n/' .config
+          grep -q "CONFIG_FIRMWARE_INCLUDE_OPENVPN=n" .config || echo "CONFIG_FIRMWARE_INCLUDE_OPENVPN=n" >> .config
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EXE=y/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EXE=n/' .config
-          sed -i 's/CONFIG_FIRMWARE_INCLUDE_HTOP=y/CONFIG_FIRMWARE_INCLUDE_HTOP=n/' .config
-          sed -i 's/CONFIG_FIRMWARE_INCLUDE_NANO=y/CONFIG_FIRMWARE_INCLUDE_NANO=n/' .config
-          sed -i 's/CONFIG_FIRMWARE_INCLUDE_IPERF3=y/CONFIG_FIRMWARE_INCLUDE_IPERF3=n/' .config
+          grep -q "CONFIG_FIRMWARE_INCLUDE_OPENSSL_EXE=n" .config || echo "CONFIG_FIRMWARE_INCLUDE_OPENSSL_EXE=n" >> .config
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_OPENSSH=y/CONFIG_FIRMWARE_INCLUDE_OPENSSH=n/' .config
+
+          # --- 5. ÉP TẮT TOÀN BỘ GÓI BINTRAY 410 GONE & GÓI CHẾT LINK ---
+          for opt in HTOP NANO IPERF3 MTR SOCAT LRZSZ VLMCSD SMARTDNSBIN V2RAY TROJAN SHADOWSOCKS SSSERVER ARIA ARIA_WEB_CONTROL TRANSMISSION TRANSMISSION_WEB_CONTROL TUNSAFE SOFTETHERVPN_SERVER SOFTETHERVPN_CLIENT SOFTETHERVPN_CMD; do
+            sed -i "s/CONFIG_FIRMWARE_${opt}=y/CONFIG_FIRMWARE_${opt}=n/" .config
+            grep -q "CONFIG_FIRMWARE_${opt}=n" .config || echo "CONFIG_FIRMWARE_${opt}=n" >> .config
+          done
           
           set -o pipefail
           sudo ./build_firmware_modify "${TNAME}" 0 2>&1 | tee build_process.log || BUILD_FAILED=1
