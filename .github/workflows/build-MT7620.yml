@@ -1,4 +1,4 @@
-name: Build Padavan MI-3 (PB-Boot)
+name: Build Padavan MI-3 (PB-Boot + Dual Lang EN/VN)
 
 on:
   workflow_dispatch:
@@ -27,17 +27,22 @@ jobs:
           sh dl_toolchain.sh
           mkdir -p /opt/images/
 
-      - name: Patch Sources & GCC & OpenSSL Docs
+      - name: Patch Sources & Languages & OpenSSL
         run: |
           cd trunk
-          # 1. Sửa mirror Golang chết link
+          
+          # 1. Tải file từ điển Tiếng Việt từ repo daivietpda vào đúng thư mục www/dict
+          mkdir -p user/www/dict
+          wget -q --no-check-certificate -O user/www/dict/VN.dict https://raw.githubusercontent.com/daivietpda/PDVN-LANG/master/VN.dict || true
+
+          # 2. Khắc phục link Golang chết
           find tools -type f -exec sed -i 's|https://gomirrors.org/dl/go|https://dl.google.com/go|g' {} + 2>/dev/null || true
           find tools -type f -exec sed -i 's|https://mirrors.aliyun.com/golang|https://dl.google.com/go|g' {} + 2>/dev/null || true
           
-          # 2. Ép cờ -fcommon tương thích GCC 11/12
+          # 3. Ép cờ -fcommon tương thích GCC 11/12
           find linux-3.4.x -name "Makefile*" -exec sed -i 's/^HOSTCFLAGS\s*:=.*/& -fcommon/' {} + 2>/dev/null || true
 
-          # 3. Triệt tiêu hoàn toàn target install_docs trong Makefile OpenSSL
+          # 4. Triệt tiêu hoàn toàn target install_docs trong Makefile OpenSSL
           find libs/libssl -name "Makefile*" -exec sed -i 's/install:.*install_docs.*/install: install_sw/g' {} + 2>/dev/null || true
           find libs/libssl -name "Makefile*" -exec sed -i 's/install_docs//g' {} + 2>/dev/null || true
           find user -name "Makefile*" -exec sed -i 's/install_docs//g' {} + 2>/dev/null || true
@@ -58,13 +63,22 @@ jobs:
           cp -f "configs/templates/${TNAME}.config" .config
           sed -i "s|^CONFIG_TOOLCHAIN_DIR=.*|CONFIG_TOOLCHAIN_DIR=${CONFIG_TOOLCHAIN_DIR}|g" .config
           
-          # Đảm bảo cấu hình OpenSSL cơ bản để libcurl biên dịch thành công
+          # --- CẤU HÌNH NGÔN NGỮ (BẬT EN + VN) ---
+          sed -i 's/CONFIG_FIRMWARE_ENABLE_LANG_SELECT=n/CONFIG_FIRMWARE_ENABLE_LANG_SELECT=y/' .config
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_LANG_EN=n/CONFIG_FIRMWARE_INCLUDE_LANG_EN=y/' .config
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_LANG_VN=n/CONFIG_FIRMWARE_INCLUDE_LANG_VN=y/' .config || true
+          sed -i 's/CONFIG_FIRMWARE_INCLUDE_LANG_VI=n/CONFIG_FIRMWARE_INCLUDE_LANG_VI=y/' .config || true
+          grep -q "CONFIG_FIRMWARE_ENABLE_LANG_SELECT=y" .config || echo "CONFIG_FIRMWARE_ENABLE_LANG_SELECT=y" >> .config
+          grep -q "CONFIG_FIRMWARE_INCLUDE_LANG_EN=y" .config || echo "CONFIG_FIRMWARE_INCLUDE_LANG_EN=y" >> .config
+          grep -q "CONFIG_FIRMWARE_INCLUDE_LANG_VN=y" .config || echo "CONFIG_FIRMWARE_INCLUDE_LANG_VN=y" >> .config
+          
+          # --- CẤU HÌNH OPENSSL CƠ BẢN VÀ DROPBEAR ---
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_HTTPS=n/CONFIG_FIRMWARE_INCLUDE_HTTPS=y/' .config
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EC=n/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EC=y/' .config
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_OPENSSH=y/CONFIG_FIRMWARE_INCLUDE_OPENSSH=n/' .config
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_DROPBEAR=n/CONFIG_FIRMWARE_INCLUDE_DROPBEAR=y/' .config
           
-          # Tắt các gói tải qua bintray hoặc link cá nhân đã chết
+          # --- TẮT CÁC GÓI LINK BINTRAY HOẶC DOWNLOADER NẶNG ---
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_HTOP=y/CONFIG_FIRMWARE_INCLUDE_HTOP=n/' .config
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_NANO=y/CONFIG_FIRMWARE_INCLUDE_NANO=n/' .config
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_IPERF3=y/CONFIG_FIRMWARE_INCLUDE_IPERF3=n/' .config
@@ -72,8 +86,6 @@ jobs:
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_SOCAT=y/CONFIG_FIRMWARE_INCLUDE_SOCAT=n/' .config
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_LRZSZ=y/CONFIG_FIRMWARE_INCLUDE_LRZSZ=n/' .config
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_VLMCSD=y/CONFIG_FIRMWARE_INCLUDE_VLMCSD=n/' .config
-          
-          # Tắt các module proxy/downloader nặng
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_SMARTDNSBIN=y/CONFIG_FIRMWARE_INCLUDE_SMARTDNSBIN=n/' .config
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_V2RAY=y/CONFIG_FIRMWARE_INCLUDE_V2RAY=n/' .config
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_TROJAN=y/CONFIG_FIRMWARE_INCLUDE_TROJAN=n/' .config
@@ -99,6 +111,6 @@ jobs:
       - name: Upload Firmware Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Padavan-MI-3-Firmware
+          name: Padavan-MI-3-Firmware-MultiLang
           path: /opt/images/*.trx
           retention-days: 7
