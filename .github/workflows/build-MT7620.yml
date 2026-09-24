@@ -17,7 +17,7 @@ jobs:
         DEBIAN_FRONTEND: noninteractive
       run: |
         sudo apt-get update
-        sudo apt-get install -y unzip libtool-bin ccache curl cmake gperf gawk flex bison nano xxd fakeroot kmod cpio git python3-docutils gettext automake autopoint texinfo build-essential help2man pkg-config zlib1g-dev libgmp3-dev libmpc-dev libmpfr-dev libncurses5-dev libltdl-dev wget libc-dev-bin
+        sudo apt-get install -y unzip libtool-bin ccache curl cmake gperf gawk flex bison nano xxd fakeroot kmod cpio git python3-docutils gettext automake autopoint texinfo build-essential help2man pkg-config zlib1g-dev libgmp3-dev libmpc-dev libmpfr-dev libncurses5-dev libltdl-dev wget libc-dev-bin liblz4-dev
 
     - name: Thiết lập Môi trường và Toolchain (/opt/rt-n56u)
       run: |
@@ -39,7 +39,8 @@ jobs:
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS.*/CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=y/g' $TPL_CONFIG
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_IPTABLES.*/CONFIG_FIRMWARE_INCLUDE_IPTABLES=y/g' $TPL_CONFIG
         
-        # Tắt các module dùng Go
+        # Tắt các module dùng Go và OpenVPN gây lỗi thiếu thư viện lz4
+        sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_OPENVPN.*/CONFIG_FIRMWARE_INCLUDE_OPENVPN=n/g' $TPL_CONFIG
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_XRAY.*/CONFIG_FIRMWARE_INCLUDE_XRAY=n/g' $TPL_CONFIG
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_V2RAY.*/CONFIG_FIRMWARE_INCLUDE_V2RAY=n/g' $TPL_CONFIG
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_TROJAN.*/CONFIG_FIRMWARE_INCLUDE_TROJAN=n/g' $TPL_CONFIG
@@ -59,15 +60,14 @@ jobs:
           grep -q "CONFIG_NETFILTER_XT_MATCH_TPROXY=y" $KERNEL_CONFIG || echo "CONFIG_NETFILTER_XT_MATCH_TPROXY=y" >> $KERNEL_CONFIG
         done
 
-        # 3. Vô hiệu hóa hoàn toàn bước make -C tools trong trunk/Makefile
-        sed -i 's/make -C tools/#make -C tools/g' Makefile
-
     - name: Tiến hành Biên dịch (Build Firmware)
       run: |
         cd /opt/rt-n56u/trunk
         sudo ./clear_tree
-        # Áp dụng lại việc bỏ qua tools sau khi chạy clear_tree
+        
+        # Bỏ qua make tools sau clear_tree
         sed -i 's/make -C tools/#make -C tools/g' Makefile
+        
         fakeroot ./build_firmware_modify MI-3
 
     - name: Trích xuất file ROM (.trx)
