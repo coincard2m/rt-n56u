@@ -65,12 +65,18 @@ jobs:
         cd /opt/rt-n56u/trunk
         sudo ./clear_tree
 
-        # Chỉ loại bỏ Go khỏi tools/Makefile, giữ nguyên mksquashfs và lzma để nén ROM
+        # Giữ nguyên target go_build và go_install nhưng biến nội dung thành lệnh rỗng
         if [ -f tools/Makefile ]; then
-          sed -i 's/\bgo\b//g' tools/Makefile
-          sed -i '/go_build:/,/fi/d' tools/Makefile
-          sed -i '/go_install:/d' tools/Makefile
+          sed -i '/^go_build:/,/^[a-zA-Z]/ { /^go_build:/! { /^[a-zA-Z]/!d } }' tools/Makefile
+          sed -i '/^go_build:/a \\t@true' tools/Makefile
+          sed -i '/^go_install:/,/^[a-zA-Z]/ { /^go_install:/! { /^[a-zA-Z]/!d } }' tools/Makefile
+          sed -i '/^go_install:/a \\t@true' tools/Makefile
         fi
+
+        # Tạo sẵn binary giả cho go để tránh lỗi nếu có lệnh gọi trực tiếp
+        mkdir -p tools/go/bin
+        echo -e '#!/bin/sh\nexit 0' > tools/go/bin/go
+        chmod +x tools/go/bin/go
 
         fakeroot ./build_firmware_modify MI-3
 
