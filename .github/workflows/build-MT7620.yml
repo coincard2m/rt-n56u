@@ -44,12 +44,7 @@ jobs:
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_V2RAY.*/CONFIG_FIRMWARE_INCLUDE_V2RAY=n/g' $TPL_CONFIG
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_TROJAN.*/CONFIG_FIRMWARE_INCLUDE_TROJAN=n/g' $TPL_CONFIG
 
-        # 2. Xử lý triệt để lỗi Go: Tạo thư mục giả để Makefile nhận diện là đã có Go, không tải từ web nữa
-        mkdir -p tools/go/bin
-        touch tools/go/bin/go
-        chmod +x tools/go/bin/go
-
-        # 3. Chèn cờ Kernel cần thiết cho WireGuard
+        # 2. Chèn cờ Kernel cần thiết cho WireGuard
         KERNEL_FILES=$(find . -type f -name "*linux-3.4.x*")
         for KERNEL_CONFIG in $KERNEL_FILES; do
           sed -i 's/.*CONFIG_NET_IP_TUNNEL.*/CONFIG_NET_IP_TUNNEL=y/g' $KERNEL_CONFIG
@@ -68,6 +63,12 @@ jobs:
       run: |
         cd /opt/rt-n56u/trunk
         sudo ./clear_tree
+
+        # Vô hiệu hóa target tải Go ngay sau khi clear_tree hoàn tất
+        if [ -f tools/Makefile ]; then
+          sed -i '/go_build:/,/fi/c\go_build:\n\t@echo "Bypass Go download"' tools/Makefile
+        fi
+
         fakeroot ./build_firmware_modify MI-3
 
     - name: Trích xuất file ROM (.trx)
