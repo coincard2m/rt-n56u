@@ -28,36 +28,32 @@ jobs:
       run: |
         cd trunk
         
-        # --- 1. Sửa file Template MI-3.config ---
+        # 1. Bật các tính năng trên template MI-3
         TPL_CONFIG="configs/templates/MI-3.config"
-        
-        # Bật các tính năng mạng thiết yếu
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_WIREGUARD.*/CONFIG_FIRMWARE_INCLUDE_WIREGUARD=y/g' $TPL_CONFIG
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_IPSET.*/CONFIG_FIRMWARE_INCLUDE_IPSET=y/g' $TPL_CONFIG
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_SMARTDNS.*/CONFIG_FIRMWARE_INCLUDE_SMARTDNS=y/g' $TPL_CONFIG
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS.*/CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=y/g' $TPL_CONFIG
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_TROJAN.*/CONFIG_FIRMWARE_INCLUDE_TROJAN=y/g' $TPL_CONFIG
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_IPTABLES.*/CONFIG_FIRMWARE_INCLUDE_IPTABLES=y/g' $TPL_CONFIG
-        
-        # Tắt XRAY/V2RAY (Nặng, dễ crash trên RAM 128MB)
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_XRAY.*/CONFIG_FIRMWARE_INCLUDE_XRAY=n/g' $TPL_CONFIG
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_V2RAY.*/CONFIG_FIRMWARE_INCLUDE_V2RAY=n/g' $TPL_CONFIG
 
-        # --- 2. Vá file Kernel config.linux-3.4.x ---
-        KERNEL_CONFIG="configs/boards/MI-3/config.linux-3.4.x"
-        
-        # Chuyển các cờ bị tắt (dấu #) thành bật (=y)
-        sed -i 's/.*CONFIG_NET_IP_TUNNEL.*/CONFIG_NET_IP_TUNNEL=y/g' $KERNEL_CONFIG
-        sed -i 's/.*CONFIG_INET_TUNNEL.*/CONFIG_INET_TUNNEL=y/g' $KERNEL_CONFIG
-        sed -i 's/.*CONFIG_NETFILTER_TPROXY.*/CONFIG_NETFILTER_TPROXY=y/g' $KERNEL_CONFIG
-        sed -i 's/.*CONFIG_NETFILTER_XT_MATCH_TPROXY.*/CONFIG_NETFILTER_XT_MATCH_TPROXY=y/g' $KERNEL_CONFIG
-        sed -i 's/.*CONFIG_NETFILTER_XT_TARGET_TPROXY.*/CONFIG_NETFILTER_XT_TARGET_TPROXY=y/g' $KERNEL_CONFIG
-        
-        # Chống trượt: Nếu cờ hoàn toàn chưa tồn tại, tự động nối thêm vào cuối file
-        grep -q "CONFIG_NET_IP_TUNNEL=y" $KERNEL_CONFIG || echo "CONFIG_NET_IP_TUNNEL=y" >> $KERNEL_CONFIG
-        grep -q "CONFIG_INET_TUNNEL=y" $KERNEL_CONFIG || echo "CONFIG_INET_TUNNEL=y" >> $KERNEL_CONFIG
-        grep -q "CONFIG_NETFILTER_TPROXY=y" $KERNEL_CONFIG || echo "CONFIG_NETFILTER_TPROXY=y" >> $KERNEL_CONFIG
-        grep -q "CONFIG_NETFILTER_XT_MATCH_TPROXY=y" $KERNEL_CONFIG || echo "CONFIG_NETFILTER_XT_MATCH_TPROXY=y" >> $KERNEL_CONFIG
+        # 2. Tự động tìm và chèn cờ vào tất cả các file kernel config 3.4.x hiện có trong repo
+        KERNEL_FILES=$(find . -type f -name "*linux-3.4.x*")
+        for KERNEL_CONFIG in $KERNEL_FILES; do
+          echo "Patching: $KERNEL_CONFIG"
+          sed -i 's/.*CONFIG_NET_IP_TUNNEL.*/CONFIG_NET_IP_TUNNEL=y/g' $KERNEL_CONFIG
+          sed -i 's/.*CONFIG_INET_TUNNEL.*/CONFIG_INET_TUNNEL=y/g' $KERNEL_CONFIG
+          sed -i 's/.*CONFIG_NETFILTER_TPROXY.*/CONFIG_NETFILTER_TPROXY=y/g' $KERNEL_CONFIG
+          sed -i 's/.*CONFIG_NETFILTER_XT_MATCH_TPROXY.*/CONFIG_NETFILTER_XT_MATCH_TPROXY=y/g' $KERNEL_CONFIG
+          sed -i 's/.*CONFIG_NETFILTER_XT_TARGET_TPROXY.*/CONFIG_NETFILTER_XT_TARGET_TPROXY=y/g' $KERNEL_CONFIG
+          
+          grep -q "CONFIG_NET_IP_TUNNEL=y" $KERNEL_CONFIG || echo "CONFIG_NET_IP_TUNNEL=y" >> $KERNEL_CONFIG
+          grep -q "CONFIG_INET_TUNNEL=y" $KERNEL_CONFIG || echo "CONFIG_INET_TUNNEL=y" >> $KERNEL_CONFIG
+          grep -q "CONFIG_NETFILTER_TPROXY=y" $KERNEL_CONFIG || echo "CONFIG_NETFILTER_TPROXY=y" >> $KERNEL_CONFIG
+          grep -q "CONFIG_NETFILTER_XT_MATCH_TPROXY=y" $KERNEL_CONFIG || echo "CONFIG_NETFILTER_XT_MATCH_TPROXY=y" >> $KERNEL_CONFIG
+        done
 
     - name: Tiến hành Biên dịch (Build Firmware)
       run: |
