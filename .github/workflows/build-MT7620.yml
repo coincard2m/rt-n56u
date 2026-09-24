@@ -39,7 +39,7 @@ jobs:
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS.*/CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=y/g' $TPL_CONFIG
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_IPTABLES.*/CONFIG_FIRMWARE_INCLUDE_IPTABLES=y/g' $TPL_CONFIG
         
-        # Tắt các module dùng Go và OpenVPN gây lỗi thiếu thư viện lz4
+        # Tắt OpenVPN và các module Go
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_OPENVPN.*/CONFIG_FIRMWARE_INCLUDE_OPENVPN=n/g' $TPL_CONFIG
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_XRAY.*/CONFIG_FIRMWARE_INCLUDE_XRAY=n/g' $TPL_CONFIG
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_V2RAY.*/CONFIG_FIRMWARE_INCLUDE_V2RAY=n/g' $TPL_CONFIG
@@ -64,10 +64,14 @@ jobs:
       run: |
         cd /opt/rt-n56u/trunk
         sudo ./clear_tree
-        
-        # Bỏ qua make tools sau clear_tree
-        sed -i 's/make -C tools/#make -C tools/g' Makefile
-        
+
+        # Chỉ loại bỏ Go khỏi tools/Makefile, giữ nguyên mksquashfs và lzma để nén ROM
+        if [ -f tools/Makefile ]; then
+          sed -i 's/\bgo\b//g' tools/Makefile
+          sed -i '/go_build:/,/fi/d' tools/Makefile
+          sed -i '/go_install:/d' tools/Makefile
+        fi
+
         fakeroot ./build_firmware_modify MI-3
 
     - name: Trích xuất file ROM (.trx)
