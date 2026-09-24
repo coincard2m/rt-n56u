@@ -39,25 +39,28 @@ jobs:
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS.*/CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=y/g' $TPL_CONFIG
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_IPTABLES.*/CONFIG_FIRMWARE_INCLUDE_IPTABLES=y/g' $TPL_CONFIG
         
-        # Tắt OpenVPN và các module Go
+        # Tắt OpenVPN và các module Go gây lỗi/nặng máy
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_OPENVPN.*/CONFIG_FIRMWARE_INCLUDE_OPENVPN=n/g' $TPL_CONFIG
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_XRAY.*/CONFIG_FIRMWARE_INCLUDE_XRAY=n/g' $TPL_CONFIG
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_V2RAY.*/CONFIG_FIRMWARE_INCLUDE_V2RAY=n/g' $TPL_CONFIG
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_TROJAN.*/CONFIG_FIRMWARE_INCLUDE_TROJAN=n/g' $TPL_CONFIG
 
-        # 2. Chèn cờ Kernel cần thiết cho WireGuard
+        # 2. Ép cờ Kernel biên dịch trực tiếp module wireguard.ko và TProxy
         KERNEL_FILES=$(find . -type f -name "*linux-3.4.x*")
         for KERNEL_CONFIG in $KERNEL_FILES; do
+          sed -i 's/.*CONFIG_WIREGUARD.*/CONFIG_WIREGUARD=m/g' $KERNEL_CONFIG
           sed -i 's/.*CONFIG_NET_IP_TUNNEL.*/CONFIG_NET_IP_TUNNEL=y/g' $KERNEL_CONFIG
           sed -i 's/.*CONFIG_INET_TUNNEL.*/CONFIG_INET_TUNNEL=y/g' $KERNEL_CONFIG
           sed -i 's/.*CONFIG_NETFILTER_TPROXY.*/CONFIG_NETFILTER_TPROXY=y/g' $KERNEL_CONFIG
           sed -i 's/.*CONFIG_NETFILTER_XT_MATCH_TPROXY.*/CONFIG_NETFILTER_XT_MATCH_TPROXY=y/g' $KERNEL_CONFIG
           sed -i 's/.*CONFIG_NETFILTER_XT_TARGET_TPROXY.*/CONFIG_NETFILTER_XT_TARGET_TPROXY=y/g' $KERNEL_CONFIG
           
+          grep -q "CONFIG_WIREGUARD=m" $KERNEL_CONFIG || echo "CONFIG_WIREGUARD=m" >> $KERNEL_CONFIG
           grep -q "CONFIG_NET_IP_TUNNEL=y" $KERNEL_CONFIG || echo "CONFIG_NET_IP_TUNNEL=y" >> $KERNEL_CONFIG
           grep -q "CONFIG_INET_TUNNEL=y" $KERNEL_CONFIG || echo "CONFIG_INET_TUNNEL=y" >> $KERNEL_CONFIG
           grep -q "CONFIG_NETFILTER_TPROXY=y" $KERNEL_CONFIG || echo "CONFIG_NETFILTER_TPROXY=y" >> $KERNEL_CONFIG
           grep -q "CONFIG_NETFILTER_XT_MATCH_TPROXY=y" $KERNEL_CONFIG || echo "CONFIG_NETFILTER_XT_MATCH_TPROXY=y" >> $KERNEL_CONFIG
+          grep -q "CONFIG_NETFILTER_XT_TARGET_TPROXY=y" $KERNEL_CONFIG || echo "CONFIG_NETFILTER_XT_TARGET_TPROXY=y" >> $KERNEL_CONFIG
         done
 
     - name: Tiến hành Biên dịch (Build Firmware)
@@ -65,7 +68,7 @@ jobs:
         cd /opt/rt-n56u/trunk
         sudo ./clear_tree
 
-        # Giữ nguyên target go_build và go_install nhưng biến nội dung thành lệnh rỗng
+        # 3. Bypass Go hoàn toàn, giữ lại mksquashfs và lzma để đóng gói file .trx
         if [ -f tools/Makefile ]; then
           sed -i '/^go_build:/,/^[a-zA-Z]/ { /^go_build:/! { /^[a-zA-Z]/!d } }' tools/Makefile
           sed -i '/^go_build:/a \\t@true' tools/Makefile
@@ -73,7 +76,6 @@ jobs:
           sed -i '/^go_install:/a \\t@true' tools/Makefile
         fi
 
-        # Tạo sẵn binary giả cho go để tránh lỗi nếu có lệnh gọi trực tiếp
         mkdir -p tools/go/bin
         echo -e '#!/bin/sh\nexit 0' > tools/go/bin/go
         chmod +x tools/go/bin/go
