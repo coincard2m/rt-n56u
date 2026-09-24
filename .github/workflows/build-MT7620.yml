@@ -18,7 +18,8 @@ jobs:
           sudo apt-get -y --no-install-recommends install \
             build-essential libtool-bin curl cmake gperf gawk flex bison xxd fakeroot \
             cpio git python3-docutils gettext automake autopoint texinfo help2man \
-            pkg-config zlib1g-dev libgmp-dev libmpc-dev libmpfr-dev libltdl-dev wget unzip
+            pkg-config zlib1g-dev libgmp-dev libmpc-dev libmpfr-dev libltdl-dev wget unzip \
+            liblzo2-dev
           sudo apt-get -y install libncurses5-dev || sudo apt-get -y install libncurses-dev
 
       - name: Setup Toolchain
@@ -27,7 +28,7 @@ jobs:
           sh dl_toolchain.sh
           mkdir -p /opt/images/
 
-      - name: Patch Sources & Languages & Fixes
+      - name: Patch Sources & Languages & OpenSSL
         run: |
           cd trunk
           
@@ -54,6 +55,10 @@ jobs:
           sed -i 's/dir_$(CONFIG_FIRMWARE_INCLUDE_IPERF3)\s*+= iperf3//g' user/Makefile 2>/dev/null || true
           sed -i 's/dir_y += iperf3//g' user/Makefile 2>/dev/null || true
 
+          # 6. FIX DỨT ĐIỂM OPENVPN: Tắt LZ4 khi cross-compile để không bị thiếu lz4.h
+          find user/openvpn -name "Makefile*" -exec sed -i 's/--enable-lz4/--disable-lz4/g' {} + 2>/dev/null || true
+          find user/openvpn -name "Makefile*" -exec sed -i 's/--enable-lzo/--enable-lzo --disable-lz4/g' {} + 2>/dev/null || true
+
       - name: Compile Firmware
         env:
           TNAME: "MI-3"
@@ -63,7 +68,7 @@ jobs:
           
           cd trunk
           
-          # Dọn dẹp trước khi nạp config
+          # Dọn dẹp sạch sẽ
           sudo ./clear_tree_simple
 
           if [ ! -f "configs/templates/${TNAME}.config" ]; then
@@ -71,7 +76,6 @@ jobs:
             exit 1
           fi
           
-          # Copy file template sạch vào .config
           cp -f "configs/templates/${TNAME}.config" .config
           sed -i "s|^CONFIG_TOOLCHAIN_DIR=.*|CONFIG_TOOLCHAIN_DIR=${CONFIG_TOOLCHAIN_DIR}|g" .config
           
@@ -91,20 +95,17 @@ jobs:
             grep -q "CONFIG_FIRMWARE_${opt}=y" .config || echo "CONFIG_FIRMWARE_${opt}=y" >> .config
           done
 
-          # --- 3. BẬT WIREGUARD, IPSET, DROPBEAR, HTTPS ---
-          for opt in INCLUDE_HTTPS INCLUDE_OPENSSL_EC INCLUDE_DROPBEAR INCLUDE_WIREGUARD INCLUDE_IPSET INCLUDE_IPMARK INCLUDE_SHAPER INCLUDE_CURL INCLUDE_WGET; do
+          # --- 3. BẬT OPENVPN, IPSET, DROPBEAR, HTTPS ---
+          for opt in INCLUDE_HTTPS INCLUDE_OPENSSL_EC INCLUDE_DROPBEAR INCLUDE_OPENVPN INCLUDE_IPSET INCLUDE_IPMARK INCLUDE_SHAPER INCLUDE_CURL INCLUDE_WGET; do
             sed -i "s/CONFIG_FIRMWARE_${opt}=n/CONFIG_FIRMWARE_${opt}=y/" .config
             grep -q "CONFIG_FIRMWARE_${opt}=y" .config || echo "CONFIG_FIRMWARE_${opt}=y" >> .config
           done
 
-          # --- 4. TẮT HẲN OPENVPN VÀ OPENSSL_EXE ---
-          sed -i 's/CONFIG_FIRMWARE_INCLUDE_OPENVPN=y/CONFIG_FIRMWARE_INCLUDE_OPENVPN=n/' .config
-          grep -q "CONFIG_FIRMWARE_INCLUDE_OPENVPN=n" .config || echo "CONFIG_FIRMWARE_INCLUDE_OPENVPN=n" >> .config
+          # --- 4. TẮT CÔNG CỤ DÒNG LỆNH OPENSSL VÀ CÁC GÓI CHẾT LINK ---
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EXE=y/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EXE=n/' .config
           grep -q "CONFIG_FIRMWARE_INCLUDE_OPENSSL_EXE=n" .config || echo "CONFIG_FIRMWARE_INCLUDE_OPENSSL_EXE=n" >> .config
           sed -i 's/CONFIG_FIRMWARE_INCLUDE_OPENSSH=y/CONFIG_FIRMWARE_INCLUDE_OPENSSH=n/' .config
 
-          # --- 5. ÉP TẮT TOÀN BỘ GÓI BINTRAY 410 GONE & GÓI CHẾT LINK ---
           for opt in HTOP NANO IPERF3 MTR SOCAT LRZSZ VLMCSD SMARTDNSBIN V2RAY TROJAN SHADOWSOCKS SSSERVER ARIA ARIA_WEB_CONTROL TRANSMISSION TRANSMISSION_WEB_CONTROL TUNSAFE SOFTETHERVPN_SERVER SOFTETHERVPN_CLIENT SOFTETHERVPN_CMD; do
             sed -i "s/CONFIG_FIRMWARE_${opt}=y/CONFIG_FIRMWARE_${opt}=n/" .config
             grep -q "CONFIG_FIRMWARE_${opt}=n" .config || echo "CONFIG_FIRMWARE_${opt}=n" >> .config
