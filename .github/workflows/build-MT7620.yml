@@ -1,3 +1,19 @@
+curl -L https://golang.org/dl/go1.15.2.linux-amd64.tar.gz ...
+gzip: stdin: not in gzip format
+tar: Child returned status 1
+make[1]: *** [Makefile:36: go_build] Error 2
+make: *** [Makefile:177: tools] Error 2
+```[span_1](start_span)[span_1](end_span)
+
+### Nguyên nhân
+Thư mục `trunk/tools` trong mã nguồn đang tìm cách tải Golang phiên bản cũ `go1.15.2` từ Google[span_2](start_span)[span_2](end_span). Do đường dẫn hoặc kết nối từ runner bị chặn/trả về trang HTML thay vì file nén, lệnh `tar zxf` báo lỗi `not in gzip format` làm hỏng quá trình build `tools`[span_3](start_span)[span_3](end_span). Go chỉ được dùng khi build Trojan/V2Ray/Xray bằng Go; với WireGuard và các tác vụ mạng cơ bản, hệ thống hoàn toàn không cần tới Go.
+
+### Cách xử lý
+Tắt hoàn toàn cờ Golang trong Makefile của `tools` trước khi chạy `build_firmware_modify`. 
+
+Dưới đây là file workflow hoàn chỉnh, đã thêm lệnh vô hiệu hóa việc tải Go:
+
+```yaml
 name: Build Padavan (MI-3 with WireGuard Kernel)
 
 on:
@@ -21,14 +37,9 @@ jobs:
 
     - name: Thiết lập Môi trường và Toolchain (/opt/rt-n56u)
       run: |
-        # 1. Đưa toàn bộ thư mục sang /opt/rt-n56u
         sudo mkdir -p /opt/rt-n56u
         sudo cp -r ./* /opt/rt-n56u/
-        
-        # 2. Cấp toàn quyền cho tài khoản runner (sửa triệt để lỗi Permission denied)
         sudo chown -R runner:runner /opt/rt-n56u
-        
-        # 3. Tải và giải nén Toolchain
         cd /opt/rt-n56u/toolchain-mipsel
         sh dl_toolchain.sh
 
@@ -36,18 +47,27 @@ jobs:
       run: |
         cd /opt/rt-n56u/trunk
         
-        # Sửa cấu hình Template cho MI-3
+        # 1. Cấu hình Template MI-3
         TPL_CONFIG="configs/templates/MI-3.config"
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_WIREGUARD.*/CONFIG_FIRMWARE_INCLUDE_WIREGUARD=y/g' $TPL_CONFIG
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_IPSET.*/CONFIG_FIRMWARE_INCLUDE_IPSET=y/g' $TPL_CONFIG
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_SMARTDNS.*/CONFIG_FIRMWARE_INCLUDE_SMARTDNS=y/g' $TPL_CONFIG
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS.*/CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=y/g' $TPL_CONFIG
-        sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_TROJAN.*/CONFIG_FIRMWARE_INCLUDE_TROJAN=y/g' $TPL_CONFIG
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_IPTABLES.*/CONFIG_FIRMWARE_INCLUDE_IPTABLES=y/g' $TPL_CONFIG
+        
+        # Tắt toàn bộ các module nặng cần Golang
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_XRAY.*/CONFIG_FIRMWARE_INCLUDE_XRAY=n/g' $TPL_CONFIG
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_V2RAY.*/CONFIG_FIRMWARE_INCLUDE_V2RAY=n/g' $TPL_CONFIG
+        sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_TROJAN.*/CONFIG_FIRMWARE_INCLUDE_TROJAN=n/g' $TPL_CONFIG
 
-        # Bù các cờ Kernel bị thiếu vào cấu hình kernel 3.4
+        # 2. Ngắt tiến trình build Golang trong tools/Makefile để tránh lỗi curl
+        if [ -f tools/Makefile ]; then
+          sed -i 's/dir_y += go//g' tools/Makefile
+          sed -i 's/tools-y += go//g' tools/Makefile
+          sed -i 's/install: go_install//install:/g' tools/Makefile
+        fi
+
+        # 3. Chèn các cờ Kernel cần thiết cho WireGuard & TProxy
         KERNEL_FILES=$(find . -type f -name "*linux-3.4.x*")
         for KERNEL_CONFIG in $KERNEL_FILES; do
           sed -i 's/.*CONFIG_NET_IP_TUNNEL.*/CONFIG_NET_IP_TUNNEL=y/g' $KERNEL_CONFIG
