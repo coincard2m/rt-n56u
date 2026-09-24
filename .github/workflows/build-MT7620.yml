@@ -19,16 +19,19 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y unzip libtool-bin ccache curl cmake gperf gawk flex bison nano xxd fakeroot kmod cpio git python3-docutils gettext automake autopoint texinfo build-essential help2man pkg-config zlib1g-dev libgmp3-dev libmpc-dev libmpfr-dev libncurses5-dev libltdl-dev wget libc-dev-bin
 
-    - name: Chuẩn bị Toolchain
+    - name: Thiết lập Toolchain chuẩn vào /opt
       run: |
-        cd toolchain-mipsel
+        # Đưa toàn bộ thư mục dự án liên kết vào /opt/rt-n56u theo đúng đường dẫn mặc định
+        sudo mkdir -p /opt/rt-n56u
+        sudo cp -r ./* /opt/rt-n56u/
+        cd /opt/rt-n56u/toolchain-mipsel
         sh dl_toolchain.sh
 
     - name: Tự động cấu hình MI-3 (Bật WireGuard, TProxy, IPSet)
       run: |
-        cd trunk
+        cd /opt/rt-n56u/trunk
         
-        # 1. Bật các tính năng trên template MI-3
+        # 1. Bật tính năng trên template MI-3
         TPL_CONFIG="configs/templates/MI-3.config"
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_WIREGUARD.*/CONFIG_FIRMWARE_INCLUDE_WIREGUARD=y/g' $TPL_CONFIG
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_IPSET.*/CONFIG_FIRMWARE_INCLUDE_IPSET=y/g' $TPL_CONFIG
@@ -39,7 +42,7 @@ jobs:
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_XRAY.*/CONFIG_FIRMWARE_INCLUDE_XRAY=n/g' $TPL_CONFIG
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_V2RAY.*/CONFIG_FIRMWARE_INCLUDE_V2RAY=n/g' $TPL_CONFIG
 
-        # 2. Tự động tìm và chèn cờ vào tất cả các file kernel config 3.4.x hiện có trong repo
+        # 2. Chèn cờ Kernel cần thiết cho WireGuard
         KERNEL_FILES=$(find . -type f -name "*linux-3.4.x*")
         for KERNEL_CONFIG in $KERNEL_FILES; do
           echo "Patching: $KERNEL_CONFIG"
@@ -57,7 +60,7 @@ jobs:
 
     - name: Tiến hành Biên dịch (Build Firmware)
       run: |
-        cd trunk
+        cd /opt/rt-n56u/trunk
         sudo ./clear_tree
         fakeroot ./build_firmware_modify MI-3
 
@@ -65,4 +68,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: MI-3_Padavan_WireGuard_Firmware
-        path: trunk/images/*.trx
+        path: /opt/rt-n56u/trunk/images/*.trx
