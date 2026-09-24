@@ -1,19 +1,4 @@
-curl -L https://golang.org/dl/go1.15.2.linux-amd64.tar.gz ...
-gzip: stdin: not in gzip format
-tar: Child returned status 1
-make[1]: *** [Makefile:36: go_build] Error 2
-make: *** [Makefile:177: tools] Error 2
-```[span_1](start_span)[span_1](end_span)
 
-### Nguyên nhân
-Thư mục `trunk/tools` trong mã nguồn đang tìm cách tải Golang phiên bản cũ `go1.15.2` từ Google[span_2](start_span)[span_2](end_span). Do đường dẫn hoặc kết nối từ runner bị chặn/trả về trang HTML thay vì file nén, lệnh `tar zxf` báo lỗi `not in gzip format` làm hỏng quá trình build `tools`[span_3](start_span)[span_3](end_span). Go chỉ được dùng khi build Trojan/V2Ray/Xray bằng Go; với WireGuard và các tác vụ mạng cơ bản, hệ thống hoàn toàn không cần tới Go.
-
-### Cách xử lý
-Tắt hoàn toàn cờ Golang trong Makefile của `tools` trước khi chạy `build_firmware_modify`. 
-
-Dưới đây là file workflow hoàn chỉnh, đã thêm lệnh vô hiệu hóa việc tải Go:
-
-```yaml
 name: Build Padavan (MI-3 with WireGuard Kernel)
 
 on:
