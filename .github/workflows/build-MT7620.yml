@@ -1,4 +1,3 @@
-
 name: Build Padavan (MI-3 with WireGuard Kernel)
 
 on:
@@ -32,7 +31,7 @@ jobs:
       run: |
         cd /opt/rt-n56u/trunk
         
-        # 1. Cấu hình Template MI-3
+        # 1. Bật Wireguard, IPSet, SmartDNS, TProxy trên template MI-3
         TPL_CONFIG="configs/templates/MI-3.config"
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_WIREGUARD.*/CONFIG_FIRMWARE_INCLUDE_WIREGUARD=y/g' $TPL_CONFIG
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_IPSET.*/CONFIG_FIRMWARE_INCLUDE_IPSET=y/g' $TPL_CONFIG
@@ -40,19 +39,17 @@ jobs:
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS.*/CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=y/g' $TPL_CONFIG
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_IPTABLES.*/CONFIG_FIRMWARE_INCLUDE_IPTABLES=y/g' $TPL_CONFIG
         
-        # Tắt toàn bộ các module nặng cần Golang
+        # Tắt các module nặng không cần thiết
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_XRAY.*/CONFIG_FIRMWARE_INCLUDE_XRAY=n/g' $TPL_CONFIG
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_V2RAY.*/CONFIG_FIRMWARE_INCLUDE_V2RAY=n/g' $TPL_CONFIG
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_TROJAN.*/CONFIG_FIRMWARE_INCLUDE_TROJAN=n/g' $TPL_CONFIG
 
-        # 2. Ngắt tiến trình build Golang trong tools/Makefile để tránh lỗi curl
-        if [ -f tools/Makefile ]; then
-          sed -i 's/dir_y += go//g' tools/Makefile
-          sed -i 's/tools-y += go//g' tools/Makefile
-          sed -i 's/install: go_install//install:/g' tools/Makefile
-        fi
+        # 2. Xử lý triệt để lỗi Go: Tạo thư mục giả để Makefile nhận diện là đã có Go, không tải từ web nữa
+        mkdir -p tools/go/bin
+        touch tools/go/bin/go
+        chmod +x tools/go/bin/go
 
-        # 3. Chèn các cờ Kernel cần thiết cho WireGuard & TProxy
+        # 3. Chèn cờ Kernel cần thiết cho WireGuard
         KERNEL_FILES=$(find . -type f -name "*linux-3.4.x*")
         for KERNEL_CONFIG in $KERNEL_FILES; do
           sed -i 's/.*CONFIG_NET_IP_TUNNEL.*/CONFIG_NET_IP_TUNNEL=y/g' $KERNEL_CONFIG
