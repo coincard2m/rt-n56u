@@ -1,132 +1,72 @@
-name: Build Padavan MI-3 (PB-Boot + Dual Lang EN/VN)
+name: Build Padavan (MI-3 with WireGuard Kernel)
 
 on:
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    name: Build Firmware for MI-3
+    runs-on: ubuntu-20.04
+    
     steps:
-      - name: Checkout Source
-        uses: actions/checkout@v4
+    - name: Checkout Code
+      uses: actions/checkout@v4
 
-      - name: Prepare Build Environment
-        env:
-          DEBIAN_FRONTEND: noninteractive
-        run: |
-          sudo apt-get update
-          sudo apt-get -y --no-install-recommends install \
-            build-essential libtool-bin curl cmake gperf gawk flex bison xxd fakeroot \
-            cpio git python3-docutils gettext automake autopoint texinfo help2man \
-            pkg-config zlib1g-dev libgmp-dev libmpc-dev libmpfr-dev libltdl-dev wget unzip \
-            liblzo2-dev
-          sudo apt-get -y install libncurses5-dev || sudo apt-get -y install libncurses-dev
+    - name: Cài đặt Dependencies (Môi trường Ubuntu)
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y unzip libtool-bin ccache curl cmake gperf gawk flex bison nano xxd fakeroot kmod cpio git python3-docutils gettext automake autopoint texinfo build-essential help2man pkg-config zlib1g-dev libgmp3-dev libmpc-dev libmpfr-dev libncurses5-dev libltdl-dev wget libc-dev-bin
 
-      - name: Setup Toolchain
-        run: |
-          cd toolchain-mipsel
-          sh dl_toolchain.sh
-          mkdir -p /opt/images/
+    - name: Chuẩn bị Toolchain
+      run: |
+        cd toolchain-mipsel
+        sh dl_toolchain.sh
 
-      - name: Patch Sources & Languages & OpenSSL
-        run: |
-          cd trunk
-          
-          # 1. Patch CSS để logo hiển thị tự co dãn vừa khít khung 150x71, không tràn ảnh
-          find user/www -name "main.css" -exec sed -i 's|width: 150px;|width: 150px; background-size: contain; background-repeat: no-repeat; background-position: center;|g' {} +
+    - name: Tự động cấu hình MI-3 (Bật WireGuard, TProxy, IPSet)
+      run: |
+        cd trunk
+        
+        # --- 1. Sửa file Template MI-3.config ---
+        TPL_CONFIG="configs/templates/MI-3.config"
+        
+        # Bật các tính năng mạng thiết yếu
+        sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_WIREGUARD.*/CONFIG_FIRMWARE_INCLUDE_WIREGUARD=y/g' $TPL_CONFIG
+        sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_IPSET.*/CONFIG_FIRMWARE_INCLUDE_IPSET=y/g' $TPL_CONFIG
+        sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_SMARTDNS.*/CONFIG_FIRMWARE_INCLUDE_SMARTDNS=y/g' $TPL_CONFIG
+        sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS.*/CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=y/g' $TPL_CONFIG
+        sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_TROJAN.*/CONFIG_FIRMWARE_INCLUDE_TROJAN=y/g' $TPL_CONFIG
+        sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_IPTABLES.*/CONFIG_FIRMWARE_INCLUDE_IPTABLES=y/g' $TPL_CONFIG
+        
+        # Tắt XRAY/V2RAY (Nặng, dễ crash trên RAM 128MB)
+        sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_XRAY.*/CONFIG_FIRMWARE_INCLUDE_XRAY=n/g' $TPL_CONFIG
+        sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_V2RAY.*/CONFIG_FIRMWARE_INCLUDE_V2RAY=n/g' $TPL_CONFIG
 
-          # 2. Khắc phục link Golang chết
-          find tools -type f -exec sed -i 's|https://gomirrors.org/dl/go|https://dl.google.com/go|g' {} + 2>/dev/null || true
-          find tools -type f -exec sed -i 's|https://mirrors.aliyun.com/golang|https://dl.google.com/go|g' {} + 2>/dev/null || true
-          
-          # 3. Ép cờ -fcommon tương thích GCC 11/12
-          find linux-3.4.x -name "Makefile*" -exec sed -i 's/^HOSTCFLAGS\s*:=.*/& -fcommon/' {} + 2>/dev/null || true
+        # --- 2. Vá file Kernel config.linux-3.4.x ---
+        KERNEL_CONFIG="configs/boards/MI-3/config.linux-3.4.x"
+        
+        # Chuyển các cờ bị tắt (dấu #) thành bật (=y)
+        sed -i 's/.*CONFIG_NET_IP_TUNNEL.*/CONFIG_NET_IP_TUNNEL=y/g' $KERNEL_CONFIG
+        sed -i 's/.*CONFIG_INET_TUNNEL.*/CONFIG_INET_TUNNEL=y/g' $KERNEL_CONFIG
+        sed -i 's/.*CONFIG_NETFILTER_TPROXY.*/CONFIG_NETFILTER_TPROXY=y/g' $KERNEL_CONFIG
+        sed -i 's/.*CONFIG_NETFILTER_XT_MATCH_TPROXY.*/CONFIG_NETFILTER_XT_MATCH_TPROXY=y/g' $KERNEL_CONFIG
+        sed -i 's/.*CONFIG_NETFILTER_XT_TARGET_TPROXY.*/CONFIG_NETFILTER_XT_TARGET_TPROXY=y/g' $KERNEL_CONFIG
+        
+        # Chống trượt: Nếu cờ hoàn toàn chưa tồn tại, tự động nối thêm vào cuối file
+        grep -q "CONFIG_NET_IP_TUNNEL=y" $KERNEL_CONFIG || echo "CONFIG_NET_IP_TUNNEL=y" >> $KERNEL_CONFIG
+        grep -q "CONFIG_INET_TUNNEL=y" $KERNEL_CONFIG || echo "CONFIG_INET_TUNNEL=y" >> $KERNEL_CONFIG
+        grep -q "CONFIG_NETFILTER_TPROXY=y" $KERNEL_CONFIG || echo "CONFIG_NETFILTER_TPROXY=y" >> $KERNEL_CONFIG
+        grep -q "CONFIG_NETFILTER_XT_MATCH_TPROXY=y" $KERNEL_CONFIG || echo "CONFIG_NETFILTER_XT_MATCH_TPROXY=y" >> $KERNEL_CONFIG
 
-          # 4. Triệt tiêu hoàn toàn target install_docs trong Makefile OpenSSL
-          find libs/libssl -name "Makefile*" -exec sed -i 's/install:.*install_docs.*/install: install_sw/g' {} + 2>/dev/null || true
-          find libs/libssl -name "Makefile*" -exec sed -i 's/install_docs//g' {} + 2>/dev/null || true
-          find user -name "Makefile*" -exec sed -i 's/install_docs//g' {} + 2>/dev/null || true
+    - name: Tiến hành Biên dịch (Build Firmware)
+      run: |
+        cd trunk
+        sudo ./clear_tree
+        fakeroot ./build_firmware_modify MI-3
 
-          # 5. Triệt tiêu hoàn toàn các module Bintray chết link khỏi user/Makefile
-          sed -i 's/dir_$(CONFIG_FIRMWARE_INCLUDE_HTOP)\s*+= htop//g' user/Makefile 2>/dev/null || true
-          sed -i 's/dir_y += htop//g' user/Makefile 2>/dev/null || true
-          sed -i 's/dir_$(CONFIG_FIRMWARE_INCLUDE_NANO)\s*+= nano//g' user/Makefile 2>/dev/null || true
-          sed -i 's/dir_y += nano//g' user/Makefile 2>/dev/null || true
-          sed -i 's/dir_$(CONFIG_FIRMWARE_INCLUDE_IPERF3)\s*+= iperf3//g' user/Makefile 2>/dev/null || true
-          sed -i 's/dir_y += iperf3//g' user/Makefile 2>/dev/null || true
-
-          # 6. FIX DỨT ĐIỂM OPENVPN: Tắt LZ4 khi cross-compile để không bị thiếu lz4.h
-          find user/openvpn -name "Makefile*" -exec sed -i 's/--enable-lz4/--disable-lz4/g' {} + 2>/dev/null || true
-          find user/openvpn -name "Makefile*" -exec sed -i 's/--enable-lzo/--enable-lzo --disable-lz4/g' {} + 2>/dev/null || true
-
-      - name: Compile Firmware
-        env:
-          TNAME: "MI-3"
-        run: |
-          ROOTDIR=$(pwd)
-          CONFIG_TOOLCHAIN_DIR="${ROOTDIR}/toolchain-mipsel"
-          
-          cd trunk
-          
-          # Dọn dẹp sạch sẽ
-          sudo ./clear_tree_simple
-
-          if [ ! -f "configs/templates/${TNAME}.config" ]; then
-            echo "::error::Khong tim thay file configs/templates/${TNAME}.config!"
-            exit 1
-          fi
-          
-          cp -f "configs/templates/${TNAME}.config" .config
-          sed -i "s|^CONFIG_TOOLCHAIN_DIR=.*|CONFIG_TOOLCHAIN_DIR=${CONFIG_TOOLCHAIN_DIR}|g" .config
-          
-          # --- 1. CẤU HÌNH NGÔN NGỮ (BẬT EN + KÊNH CN ĐÃ GÁN TIẾNG VIỆT) ---
-          sed -i 's/CONFIG_FIRMWARE_ENABLE_LANG_SELECT=n/CONFIG_FIRMWARE_ENABLE_LANG_SELECT=y/' .config
-          sed -i 's/CONFIG_FIRMWARE_INCLUDE_LANG_EN=n/CONFIG_FIRMWARE_INCLUDE_LANG_EN=y/' .config
-          sed -i 's/CONFIG_FIRMWARE_INCLUDE_LANG_CN=n/CONFIG_FIRMWARE_INCLUDE_LANG_CN=y/' .config
-          grep -q "CONFIG_FIRMWARE_ENABLE_LANG_SELECT=y" .config || echo "CONFIG_FIRMWARE_ENABLE_LANG_SELECT=y" >> .config
-          grep -q "CONFIG_FIRMWARE_INCLUDE_LANG_EN=y" .config || echo "CONFIG_FIRMWARE_INCLUDE_LANG_EN=y" >> .config
-          grep -q "CONFIG_FIRMWARE_INCLUDE_LANG_CN=y" .config || echo "CONFIG_FIRMWARE_INCLUDE_LANG_CN=y" >> .config
-          sed -i 's/CONFIG_FIRMWARE_INCLUDE_LANG_RU=y/CONFIG_FIRMWARE_INCLUDE_LANG_RU=n/' .config
-          sed -i 's/CONFIG_FIRMWARE_INCLUDE_LANG_UK=y/CONFIG_FIRMWARE_INCLUDE_LANG_UK=n/' .config
-          
-          # --- 2. CẤU HÌNH DRIVER USB ĐẦY ĐỦ ---
-          for opt in ENABLE_USB ENABLE_UFSD ENABLE_FAT ENABLE_EXFAT ENABLE_EXT2 ENABLE_EXT3 ENABLE_EXT4 ENABLE_FUSE ENABLE_SWAP; do
-            sed -i "s/CONFIG_FIRMWARE_${opt}=n/CONFIG_FIRMWARE_${opt}=y/" .config
-            grep -q "CONFIG_FIRMWARE_${opt}=y" .config || echo "CONFIG_FIRMWARE_${opt}=y" >> .config
-          done
-
-          # --- 3. BẬT OPENVPN, IPSET, DROPBEAR, HTTPS ---
-          for opt in INCLUDE_HTTPS INCLUDE_OPENSSL_EC INCLUDE_DROPBEAR INCLUDE_OPENVPN INCLUDE_IPSET INCLUDE_IPMARK INCLUDE_SHAPER INCLUDE_CURL INCLUDE_WGET; do
-            sed -i "s/CONFIG_FIRMWARE_${opt}=n/CONFIG_FIRMWARE_${opt}=y/" .config
-            grep -q "CONFIG_FIRMWARE_${opt}=y" .config || echo "CONFIG_FIRMWARE_${opt}=y" >> .config
-          done
-
-          # --- 4. TẮT CÔNG CỤ DÒNG LỆNH OPENSSL VÀ CÁC GÓI CHẾT LINK ---
-          sed -i 's/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EXE=y/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EXE=n/' .config
-          grep -q "CONFIG_FIRMWARE_INCLUDE_OPENSSL_EXE=n" .config || echo "CONFIG_FIRMWARE_INCLUDE_OPENSSL_EXE=n" >> .config
-          sed -i 's/CONFIG_FIRMWARE_INCLUDE_OPENSSH=y/CONFIG_FIRMWARE_INCLUDE_OPENSSH=n/' .config
-
-          for opt in HTOP NANO IPERF3 MTR SOCAT LRZSZ VLMCSD SMARTDNSBIN V2RAY TROJAN SHADOWSOCKS SSSERVER ARIA ARIA_WEB_CONTROL TRANSMISSION TRANSMISSION_WEB_CONTROL TUNSAFE SOFTETHERVPN_SERVER SOFTETHERVPN_CLIENT SOFTETHERVPN_CMD; do
-            sed -i "s/CONFIG_FIRMWARE_${opt}=y/CONFIG_FIRMWARE_${opt}=n/" .config
-            grep -q "CONFIG_FIRMWARE_${opt}=n" .config || echo "CONFIG_FIRMWARE_${opt}=n" >> .config
-          done
-          
-          set -o pipefail
-          sudo ./build_firmware_modify "${TNAME}" 0 2>&1 | tee build_process.log || BUILD_FAILED=1
-          
-          if [ "$BUILD_FAILED" = "1" ]; then
-            echo "=========================================================="
-            echo "::error::TIEN TRINH BUILD BI LOI! LOG CHI TIET:"
-            echo "=========================================================="
-            grep -E -C 3 -i "error:|undefined reference|recipe for target .* failed" build_process.log | tail -n 40
-            exit 1
-          fi
-          
-          sudo mv -f images/*.trx /opt/images/ 2>/dev/null || true
-
-      - name: Upload Firmware Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Padavan-MI-3-Firmware-MultiLang
-          path: /opt/images/*.trx
-          retention-days: 7
+    - name: Trích xuất file ROM (.trx)
+      uses: actions/upload-artifact@v4
+      with:
+        name: MI-3_Padavan_WireGuard_Firmware
+        path: trunk/images/*.trx
