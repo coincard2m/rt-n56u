@@ -31,7 +31,7 @@ jobs:
       run: |
         cd /opt/rt-n56u/trunk
         
-        # 1. Bật Wireguard, IPSet, SmartDNS, TProxy trên template MI-3
+        # 1. Bật Wireguard, IPSet, SmartDNS trên template MI-3
         TPL_CONFIG="configs/templates/MI-3.config"
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_WIREGUARD.*/CONFIG_FIRMWARE_INCLUDE_WIREGUARD=y/g' $TPL_CONFIG
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_IPSET.*/CONFIG_FIRMWARE_INCLUDE_IPSET=y/g' $TPL_CONFIG
@@ -39,7 +39,7 @@ jobs:
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS.*/CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS=y/g' $TPL_CONFIG
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_IPTABLES.*/CONFIG_FIRMWARE_INCLUDE_IPTABLES=y/g' $TPL_CONFIG
         
-        # Tắt các module nặng không cần thiết
+        # Tắt các module dùng Go
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_XRAY.*/CONFIG_FIRMWARE_INCLUDE_XRAY=n/g' $TPL_CONFIG
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_V2RAY.*/CONFIG_FIRMWARE_INCLUDE_V2RAY=n/g' $TPL_CONFIG
         sed -i 's/.*CONFIG_FIRMWARE_INCLUDE_TROJAN.*/CONFIG_FIRMWARE_INCLUDE_TROJAN=n/g' $TPL_CONFIG
@@ -59,16 +59,15 @@ jobs:
           grep -q "CONFIG_NETFILTER_XT_MATCH_TPROXY=y" $KERNEL_CONFIG || echo "CONFIG_NETFILTER_XT_MATCH_TPROXY=y" >> $KERNEL_CONFIG
         done
 
+        # 3. Vô hiệu hóa hoàn toàn bước make -C tools trong trunk/Makefile
+        sed -i 's/make -C tools/#make -C tools/g' Makefile
+
     - name: Tiến hành Biên dịch (Build Firmware)
       run: |
         cd /opt/rt-n56u/trunk
         sudo ./clear_tree
-
-        # Vô hiệu hóa target tải Go ngay sau khi clear_tree hoàn tất
-        if [ -f tools/Makefile ]; then
-          sed -i '/go_build:/,/fi/c\go_build:\n\t@echo "Bypass Go download"' tools/Makefile
-        fi
-
+        # Áp dụng lại việc bỏ qua tools sau khi chạy clear_tree
+        sed -i 's/make -C tools/#make -C tools/g' Makefile
         fakeroot ./build_firmware_modify MI-3
 
     - name: Trích xuất file ROM (.trx)
